@@ -1,0 +1,41 @@
+build/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+.DS_Store
+Thumbs.db
+
+external/sfml/
+external/nlohmann_json/
+
+# 忽略各资源目录下的所有文件/子目录（基础规则）
+assets/textures/1x/**
+assets/audio/**
+assets/fonts/**
+assets/shaders/**
+
+# 反向保留：不忽略指定的核心资源文件（! 表示「排除在忽略规则外」，即保留）
+!assets/textures/1x/8BitDeck.png
+!assets/textures/1x/Jokers.png
+!assets/fonts/m6x11plus.ttf
+
+# 忽略各目录下的空占位文件.gitkeep（无需保留）
+assets/textures/1x/.gitkeep
+assets/audio/.gitkeep
+assets/fonts/.gitkeep
+assets/shaders/.gitkeep

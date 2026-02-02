@@ -1,0 +1,36 @@
+{
+  "j_joker": {
+    "name": "Joker",
+    "text": "+4 Mult",
+    "rarity": "Common",
+    "cost": 2,
+    "atlas_id": 0,
+    "effect_id": "SimpleMult",
+    "params": {
+      "amount": 4
+    }
+  },
+  "j_greedy_joker": {
+    "name": "Greedy Joker",
+    "text": "Played cards with Diamond suit give +4 Mult when scored",
+    "rarity": "Common",
+    "cost": 5,
+    "atlas_id": 12,
+    "effect_id": "SuitMult",
+    "params": {
+      "amount": 4,
+      "suit": "Diamonds"
+    }
+  },
+  "j_abstract": {
+    "name": "Abstract Joker",
+    "text": "+3 Mult for each Joker card",
+    "rarity": "Common",
+    "cost": 4,
+    "atlas_id": 20,
+    "effect_id": "AbstractJoker",
+    "params": {
+      "amount": 3
+    }
+  }
+}
