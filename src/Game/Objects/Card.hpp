@@ -21,13 +21,15 @@ enum class CardType {
 
 class Card {
 public:
-    // 扑克牌 (8BitDeck.png)
+    // 扑克牌 (8BitDeck.png) - 保持原样
     static constexpr int DECK_WIDTH = 71;
     static constexpr int DECK_HEIGHT = 95;
     
-    // Joker (Jokers.png)
+    // Joker (Jokers.png) - 根据你的描述
     static constexpr int JOKER_WIDTH = 69;
     static constexpr int JOKER_HEIGHT = 93;
+    static constexpr int JOKER_GAP = 2;    // [New] 间距
+    static constexpr int JOKER_MARGIN = 1; // [New] 边距
 
     // Joker 图集也是 10 列
     static constexpr int JOKER_COLS = 10;
@@ -40,7 +42,7 @@ public:
         
         initVisuals(texture, DECK_WIDTH, DECK_HEIGHT);
         
-        // 计算扑克牌的 UV 坐标
+        // 计算扑克牌的 UV 坐标 (标准无间距排列)
         int gridX = static_cast<int>(rank) - 2; 
         int gridY = 0;
         switch (suit) {
@@ -67,9 +69,14 @@ public:
         int gridX = jokerId % JOKER_COLS;
         int gridY = jokerId / JOKER_COLS;
 
+        // [修复] 根据 Sprite Sheet 的 Margin(1) 和 Gap(2) 计算精确坐标
+        // x = margin + col * (width + gap)
+        int rectX = JOKER_MARGIN + gridX * (JOKER_WIDTH + JOKER_GAP);
+        int rectY = JOKER_MARGIN + gridY * (JOKER_HEIGHT + JOKER_GAP);
+
         m_sprite.setTextureRect(sf::IntRect(
-            gridX * JOKER_WIDTH, 
-            gridY * JOKER_HEIGHT, 
+            rectX, 
+            rectY, 
             JOKER_WIDTH, 
             JOKER_HEIGHT
         ));

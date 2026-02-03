@@ -10,6 +10,7 @@
 #include "../Data/JokerData.hpp"
 #include "../Objects/Card.hpp"
 #include "../Effects/JokerEffects.hpp"
+#include "ResourceManager.hpp" // [New] 引入资源管理器
 
 using json = nlohmann::json;
 
@@ -51,14 +52,20 @@ public:
         std::cout << "Loaded " << m_jokerDb.size() << " jokers." << std::endl;
     }
 
-    std::shared_ptr<Card> createJoker(const std::string& jokerId, const sf::Texture& texture) {
+    // [Modified] 简化接口：不再需要传递 texture
+    std::shared_ptr<Card> createJoker(const std::string& jokerId) {
         if (m_jokerDb.find(jokerId) == m_jokerDb.end()) {
             std::cerr << "Error: Joker ID not found: " << jokerId << std::endl;
             return nullptr;
         }
 
+        // 内部直接获取资源
+        sf::Texture& texture = ResourceManager::Instance().getTexture("jokers");
+
         const JokerData& data = m_jokerDb[jokerId];
+        // 使用获取到的纹理创建 Card
         auto card = std::make_shared<Card>(data.atlasIndex, texture);
+        
         card->setAbilityName(data.name);
         card->setCost(data.cost);
         std::string descWithPrice = data.text + "\nPrice: $" + std::to_string(data.cost);
@@ -92,8 +99,6 @@ public:
         std::ifstream f(filepath);
         if (!f.is_open()) {
             std::cerr << "Failed to open ranks database: " << filepath << std::endl;
-            // 如果文件没找到，这里返回，m_rankChips 将为空
-            // 后续 getRankChips 会返回 0，这符合“不硬编码”的要求
             return;
         }
 
@@ -105,7 +110,6 @@ public:
             return;
         }
 
-        // 字符串 -> 枚举 映射表
         std::unordered_map<std::string, Rank> strToRank = {
             {"2", Rank::Two}, {"3", Rank::Three}, {"4", Rank::Four},
             {"5", Rank::Five}, {"6", Rank::Six}, {"7", Rank::Seven},
@@ -118,8 +122,6 @@ public:
         for (auto& [key, value] : j.items()) {
             if (strToRank.find(key) != strToRank.end()) {
                 Rank r = strToRank[key];
-                // 你的 JSON 格式是 "2": { "chips": 2 }
-                // 所以使用 value.value("chips", 0) 是正确的
                 int chips = value.value("chips", 0);
                 m_rankChips[static_cast<int>(r)] = chips;
                 loadedCount++;
@@ -128,18 +130,12 @@ public:
         std::cout << "Loaded chip values for " << loadedCount << " ranks from JSON." << std::endl;
     }
 
-    // 查询接口
     int getRankChips(Rank rank) {
         int r = static_cast<int>(rank);
-        
-        // [核心修改] 恢复使用 Map 查找，完全依赖 JSON 数据
         auto it = m_rankChips.find(r);
         if (it != m_rankChips.end()) {
             return it->second;
         }
-
-        // 如果找不到（例如 JSON 加载失败或该点数缺失），打印警告并返回 0
-        // 不再进行硬编码回退
         std::cerr << "[Warning] No chip value found for Rank index: " << r << " (Check ranks.json)" << std::endl;
         return 0; 
     }
@@ -148,7 +144,5 @@ private:
     GameDatabase() = default;
     
     std::unordered_map<std::string, JokerData> m_jokerDb;
-    
-    // 存储点数对应的筹码值
     std::map<int, int> m_rankChips; 
 };

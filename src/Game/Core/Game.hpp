@@ -2,15 +2,16 @@
 #include <SFML/Graphics.hpp>
 #include <memory>
 #include <vector>
+#include <string>
 
-// 引入核心类型
+// 引入核心组件
 #include "GameContext.hpp"
-#include "../Objects/CardArea.hpp"
-#include "../Objects/Card.hpp"
+#include "../States/IGameState.hpp"
+#include "../UI/UIManager.hpp"
 #include "../UI/Tooltip.hpp"
 #include "../UI/FloatingText.hpp"
-#include "../Effects/JokerEffects.hpp"
-#include "../Systems/ScoringManager.hpp" 
+#include "../Objects/CardArea.hpp"
+#include "../Objects/Card.hpp" 
 
 class Game {
 public:
@@ -18,6 +19,24 @@ public:
     ~Game() = default;
 
     void run();
+
+    // --- 状态管理 ---
+    // 切换到新状态 (RunState, ShopState 等)
+    void changeState(std::unique_ptr<IGameState> newState);
+
+    // --- 公共 API (供 State 调用) ---
+    
+    // 获取游戏核心数据上下文
+    GameContext& getContext() { return m_ctx; }
+    
+    // 获取 UI 管理器
+    UIManager& getUI() { return m_ui; }
+    
+    // 获取窗口引用 (用于鼠标坐标计算等)
+    sf::RenderWindow& getWindow() { return m_window; }
+
+    // 生成飘字特效
+    void spawnFloatingText(const std::string& text, sf::Vector2f pos, sf::Color color);
 
 private:
     void initWindow();
@@ -28,14 +47,7 @@ private:
     void update(float dt);
     void render();
 
-    void refillHand();
-    void restockShop();
-    void startRound();
-
-    // 生成飘字
-    void spawnFloatingText(const std::string& text, sf::Vector2f pos, sf::Color color);
-
-    // --- 核心 ---
+    // --- 渲染相关 ---
     sf::RenderWindow m_window;
     
     // CRT 管线
@@ -44,39 +56,25 @@ private:
     bool m_shaderLoaded = false;
     float m_shaderTime = 0.0f;
 
-    // 资源
-    sf::Texture m_textureDeck;
-    sf::Texture m_textureJokers;
-    sf::Font m_font;
+    // --- UI & 特效 ---
+    UIManager m_ui;
     Tooltip m_tooltip;
     bool m_showTooltip = false;
-    // UI 文本
-    sf::Text m_textHUD;    // 显示 Hands: 4, Discards: 3
-    sf::Text m_textScore;  // 显示 Score: 100 / 300
-    sf::Text m_textShopInfo;
-    sf::Text m_textDeckCount;
-
-    // 牌型信息面板组件
-    sf::RectangleShape m_handInfoBg;      // 整体背景
-    sf::RectangleShape m_chipsBox;       // 蓝色筹码框
-    sf::RectangleShape m_multBox;        // 红色倍率框
-    
-    sf::Text m_textHandType;             // 牌型名称 (如: 对子)
-    sf::Text m_textHandLevel;            // 等级 (如: 等级1)
-    sf::Text m_textBaseChips;            // 基础筹码数值
-    sf::Text m_textBaseMult;             // 基础倍率数值
-    sf::Text m_textMultSymbol;           // 中间的 "X" 符号
-
     std::vector<FloatingText> m_effects;
 
-    // 数据上下文
+    // --- 核心数据 ---
     GameContext m_ctx;
-    
-    // 场景对象
+
+    // --- 场景对象 (持有权在 Game，Context 持有引用) ---
     std::shared_ptr<CardArea> m_handArea;
     std::shared_ptr<CardArea> m_jokerArea;
     std::shared_ptr<CardArea> m_shopArea;
-
-    std::shared_ptr<Card> m_pendingPurchase = nullptr;
+    
+    // --- 交互状态 ---
+    // 鼠标当前悬停的卡牌 (用于 Tooltip 和 缩放动画)
+    // [修复] 这是之前报错未定义的变量
     std::shared_ptr<Card> m_hoveredCard = nullptr;
+
+    // --- 当前状态 (状态机) ---
+    std::unique_ptr<IGameState> m_currentState;
 };
