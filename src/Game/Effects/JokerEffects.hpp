@@ -82,3 +82,32 @@ public:
 private:
     int m_amount;
 };
+
+// --- 弃牌返利效果 (Discard Rebate) ---
+// 适用：Mail-In Rebate (弃掉特定 Rank 给钱)
+class DiscardRebateEffect : public IEffect {
+public:
+    DiscardRebateEffect(int dollars, Rank targetRank) 
+        : m_dollars(dollars), m_targetRank(targetRank) {}
+
+    std::optional<EffectResult> Calculate([[maybe_unused]] const Card& self, const EffectContext& ctx) override {
+        // 检查触发时机：必须是弃牌阶段 (OnDiscard)
+        // 并且必须是针对单张牌 (Individual，此时 other_card 不为空)
+        if (ctx.trigger == TriggerType::OnDiscard && ctx.other_card != nullptr) {
+            
+            // 检查被弃掉的牌是否符合条件
+            if (ctx.other_card->getRank() == m_targetRank) {
+                EffectResult res;
+                res.triggered = true;
+                res.dollars_add = m_dollars;
+                res.message = "+$" + std::to_string(m_dollars);
+                return res;
+            }
+        }
+        return std::nullopt;
+    }
+
+private:
+    int m_dollars;
+    Rank m_targetRank;
+};

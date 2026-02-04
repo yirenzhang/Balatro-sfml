@@ -1,5 +1,6 @@
 #include "Game.hpp"
-#include "../States/StateDefinitions.hpp" // 包含 ShopState 的具体实现
+#include "../States/RunState.hpp"
+#include "../States/ShopState.hpp"
 #include "../Systems/GameDatabase.hpp"
 #include <iostream>
 #include <ctime>
@@ -98,122 +99,142 @@ void Game::processEvents() {
 
 void Game::update(float dt) {
     // 1. Shader 时间更新
+    // 对应 CRT.fs: uniform float time;
     if (m_shaderLoaded) {
         m_shaderTime += dt;
-        m_crtShader.setUniform("time", m_shaderTime);
+        // 简单防止溢出，每 1000 秒重置一次 (Shader 里的 sin/cos 是循环的，不影响效果)
+        if (m_shaderTime > 1000.0f) m_shaderTime = 0.0f;
+        
+        // 注意：这里其实不需要 setUniform，因为我们在 render 时会统一设置
+        // 但为了保险起见，或者如果 update 里有其他逻辑依赖，留着也无妨。
+        // 为了代码整洁，建议移到 render 中统一处理。
     }
 
     // 2. 物理/动画更新
-    // [修复点] 全局更新 Joker 区域 (必须调用，否则商店买的牌飞不过去)
+    // 必须调用 m_jokerArea->update，否则动画不播放
     if (m_jokerArea) m_jokerArea->update(dt);
 
-    // 委托给当前状态更新逻辑 (RunState 更新手牌, ShopState 更新商品)
     if (m_currentState) {
         m_currentState->update(*this, dt);
     }
 
-    // 3. 全局 UI 数据更新 (HUD, 分数等)
+    // 3. UI 更新
     m_ui.update(m_ctx);
 
-    // 4. 漂浮文字特效更新与清理
+    // 4. 特效更新与清理
     for (auto& effect : m_effects) {
         effect.update(dt);
     }
-    // [注意] 需要 #include <algorithm>
+    // C++20/Standard remove_if idioms
     m_effects.erase(
         std::remove_if(m_effects.begin(), m_effects.end(), 
             [](const FloatingText& ft){ return ft.isDead(); }),
         m_effects.end()
     );
 
-    // 5. 鼠标悬停检测
-    // 获取鼠标在世界坐标系的位置
+    // 5. 鼠标交互逻辑 (保持你原有的代码不变...)
+    // ... (省略鼠标悬停检测代码，直接用你原来的即可) ...
     sf::Vector2f mousePos = m_window.mapPixelToCoords(sf::Mouse::getPosition(m_window));
-    
     std::shared_ptr<Card> currentHovered = nullptr;
-    
-    // 优先级 A: 始终检测 Joker 区域 (位于顶部)
-    if (m_jokerArea) {
-        currentHovered = m_jokerArea->getCardAt(mousePos.x, mousePos.y);
-    }
-
-    // 优先级 B: 如果没悬停 Joker，根据当前状态检测特定区域
+    if (m_jokerArea) currentHovered = m_jokerArea->getCardAt(mousePos.x, mousePos.y);
     if (!currentHovered) {
-        // 注意：这里依赖于 RunState/ShopState 在 onEnter 中正确设置了 m_ctx.state
-        if (m_ctx.state == GameState::Run) {
-            if (m_handArea) currentHovered = m_handArea->getCardAt(mousePos.x, mousePos.y);
-        }
-        else if (m_ctx.state == GameState::Shop) {
-            if (m_shopArea) currentHovered = m_shopArea->getCardAt(mousePos.x, mousePos.y);
-        }
+        if (m_ctx.state == GameState::Run && m_handArea) currentHovered = m_handArea->getCardAt(mousePos.x, mousePos.y);
+        else if (m_ctx.state == GameState::Shop && m_shopArea) currentHovered = m_shopArea->getCardAt(mousePos.x, mousePos.y);
     }
-
-    // 处理悬停状态切换 (触发缩放动画)
     if (currentHovered != m_hoveredCard) {
-        if (m_hoveredCard) m_hoveredCard->setHover(false); // 旧卡取消悬停
-        if (currentHovered) currentHovered->setHover(true); // 新卡激活悬停
+        if (m_hoveredCard) m_hoveredCard->setHover(false);
+        if (currentHovered) currentHovered->setHover(true);
         m_hoveredCard = currentHovered;
     }
 
-    // 6. Tooltip 数据更新
+    // 6. Tooltip
     m_showTooltip = false;
     if (m_hoveredCard) {
         m_showTooltip = true;
-        
         if (m_hoveredCard->getType() == CardType::Joker) {
-            // Joker 显示名字和能力描述
-            m_tooltip.update(
-                m_hoveredCard->getAbilityName(),
-                m_hoveredCard->getDescription(),
-                mousePos
-            );
-        }
-        else {
-            // 普通牌显示筹码信息
-            std::string desc = "Chips: " + std::to_string(m_hoveredCard->getChips());
-            m_tooltip.update("Playing Card", desc, mousePos);
+            m_tooltip.update(m_hoveredCard->getAbilityName(), m_hoveredCard->getDescription(), mousePos);
+        } else {
+            m_tooltip.update("Playing Card", "Chips: " + std::to_string(m_hoveredCard->getChips()), mousePos);
         }
     }
+    
+    // --- [新增] 快捷键调试 CRT 参数 (可选) ---
+    // 按上/下键调整扫描线密度
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) m_crtParams.scanlines += 10.0f;
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) m_crtParams.scanlines -= 10.0f;
 }
 
 void Game::render() {
+    // --------------------------------------------------------
+    // 第一阶段：离屏绘制 (Off-screen Rendering)
+    // 所有内容先画到 m_renderTexture
+    // --------------------------------------------------------
+    
     m_renderTexture.clear(sf::Color(35, 35, 40));
 
-    // 1. 绘制 Joker 区域 (这是所有状态通用的)
+    // 1. 绘制 Joker 区域
     if (m_jokerArea) m_jokerArea->draw(m_renderTexture);
 
-    // 2. [New] 委托给当前状态绘制特定内容 (如 RunState 画手牌，ShopState 画商品)
+    // 2. 绘制状态特定内容
     if (m_currentState) {
-        // std::cout << "Game: Calling state draw..." << std::endl; // [Debug 1]
         m_currentState->draw(*this, m_renderTexture);
     }
 
     // 3. 绘制特效
     for (auto& effect : m_effects) effect.draw(m_renderTexture);
+
+    // 4. [重要] 绘制 UI 和 Tooltip 到 RenderTexture
+    // 这样 UI 也会有 CRT 效果 (这符合 Balatro 风格)
+    if (m_currentState) {
+        // 修正：让 UI 画在 texture 上，而不是 window 上
+        // 这需要你的 UIManager::draw 支持 sf::RenderTarget& 参数 (之前已做过修改)
+        m_ui.draw(m_renderTexture, m_ctx.state);
+    }
+    
+    if (m_showTooltip) {
+        m_tooltip.draw(m_renderTexture);
+    }
     
     m_renderTexture.display();
     
-    // 上屏
+    // --------------------------------------------------------
+    // 第二阶段：上屏 (On-screen Display)
+    // 应用 Shader 并绘制到窗口
+    // --------------------------------------------------------
+
     m_window.clear();
     sf::Sprite canvas(m_renderTexture.getTexture());
-    //if (m_shaderLoaded) m_window.draw(canvas, &m_crtShader);
-    //else
-    m_window.draw(canvas);
 
-    // UI 绘制
-    // 注意：现在的 UIManager 需要知道 State 吗？
-    // 如果 UI 样式差异很大，可以让 State 自己调用 game.getUI().draw(...)
-    // 或者我们仍然传递 enum (如果还保留的话)
-    // 既然我们消灭了 enum，我们可以让 State 在它的 draw() 方法里调用 UI 绘制函数
-    // 比如：RunState::draw() -> game.getUI().drawRunPanel()
-    // 这里简单处理：让 UI 自行决定画什么，或者提供不同的 draw 方法
-    if (m_currentState) {
-        // 让 UI 知道当前是什么模式比较麻烦，除非使用 dynamic_cast
-        // 简单方案：在 State::draw 里调用 game.getUI().drawHUD()
-        m_ui.draw(m_window, GameState::Run); // 这里的枚举需要兼容或移除
+    if (m_shaderLoaded) {
+        // --- 1. 基础环境参数 ---
+        
+        // [关键] 显式传递纹理
+        // 对应 CRT.fs: uniform sampler2D texture;
+        m_crtShader.setUniform("texture", sf::Shader::CurrentTexture);
+        
+        // [关键] 传递时间
+        // 对应 CRT.fs: uniform float time;
+        m_crtShader.setUniform("time", m_shaderTime);
+        
+        // [关键] 传递分辨率
+        // 对应 CRT.fs: uniform vec2 resolution;
+        sf::Vector2f texSize(
+            static_cast<float>(m_renderTexture.getSize().x), 
+            static_cast<float>(m_renderTexture.getSize().y)
+        );
+        m_crtShader.setUniform("resolution", texSize);
+
+        // --- 2. 应用高级参数 ---
+        // 使用我们封装的结构体，一键应用所有 "factor" 参数
+        m_crtParams.applyTo(m_crtShader);
+
+        // 绘制！
+        m_window.draw(canvas, &m_crtShader);
+    } else {
+        // 如果 Shader 没加载成功，直接画原图
+        m_window.draw(canvas);
     }
-    
-    if (m_showTooltip) m_tooltip.draw(m_window);
+
     m_window.display();
 }
 

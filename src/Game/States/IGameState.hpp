@@ -9,10 +9,10 @@ public:
     virtual ~IGameState() = default;
 
     // 进入该状态时触发 (类似于 startRound 或 restockShop)
-    virtual void onEnter(Game& game) {}
+    virtual void onEnter([[maybe_unused]] Game& game) {}
     
     // 退出该状态时触发
-    virtual void onExit(Game& game) {}
+    virtual void onExit([[maybe_unused]] Game& game) {}
 
     // 处理输入 (替代 processEvents 中的 if-else)
     virtual void handleEvent(Game& game, const sf::Event& event) = 0;

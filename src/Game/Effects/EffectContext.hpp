@@ -3,19 +3,21 @@
 #include <string>
 #include "../Objects/Card.hpp"
 
-// [修复] 前置声明 CardArea，告诉编译器这是一个类
 class CardArea;
 
-// 触发时机 (还原 Lua 的上下文逻辑)
+/**
+ * 触发时机枚举
+ * * 用于区分效果是在何时被调用的。
+ */
 enum class TriggerType {
-    Individual,     // [新] 针对每一张打出的牌触发 (context.individual)
-    Global,         // [新] 针对整手牌的全局触发 (context.joker_main)
+    Individual,     // 结算打出的牌 (每张牌独立触发)
+    HeldInHand,     // [新增] 结算手中的牌 (例如钢铁牌、男爵)
+    Global,         // 全局结算 (Joker 汇总)
     OnDiscard,      // 弃牌时
-    OnShopEntry,    // 商店
-    // ... 其他 ...
+    OnShopEntry,    // 进入商店时
 };
 
-// 效果反馈
+// ... (EffectResult 和 EffectContext 保持不变)
 struct EffectResult {
     bool triggered = false;
     int chips_add = 0;
@@ -25,16 +27,15 @@ struct EffectResult {
     std::string message;
 };
 
-// 核心上下文
 struct EffectContext {
     TriggerType trigger;
     
-    // 全局信息
-    std::vector<Card*> scoring_cards; // 所有计分牌
-    CardArea* joker_area = nullptr;   // 引用 Joker 区 (用于 Abstract Joker 统计数量)
+    std::vector<Card*> scoring_cards; 
+    CardArea* joker_area = nullptr;
+    
+    // [新增] 引用手牌区，方便计算“手中持有的牌”
+    CardArea* hand_area = nullptr;   
 
-    // [关键新增] 当前正在评估的目标卡牌
-    // 当 trigger == Individual 时，这个指针指向当前遍历到的那张扑克牌 (context.other_card)
     Card* other_card = nullptr; 
 
     int current_chips = 0;

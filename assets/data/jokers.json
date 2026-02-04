@@ -32,5 +32,17 @@
     "params": {
       "amount": 3
     }
+  },
+  "j_rebate_test": {
+    "name": "Rebate Test",
+    "text": "Earn $1 for each discarded Ace",
+    "rarity": "Common",
+    "cost": 3,
+    "atlas_id": 4, 
+    "effect_id": "DiscardRebate",
+    "params": {
+      "amount": 1,
+      "rank": "Ace"
+    }
   }
 }

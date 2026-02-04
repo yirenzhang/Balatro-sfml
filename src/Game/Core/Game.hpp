@@ -12,6 +12,7 @@
 #include "../UI/FloatingText.hpp"
 #include "../Objects/CardArea.hpp"
 #include "../Objects/Card.hpp" 
+#include "../Data/CRTParams.hpp"
 
 class Game {
 public:
@@ -38,6 +39,8 @@ public:
     // 生成飘字特效
     void spawnFloatingText(const std::string& text, sf::Vector2f pos, sf::Color color);
 
+    CRTParams& getCRTParams() { return m_crtParams; }
+
 private:
     void initWindow();
     void initResources();
@@ -53,6 +56,7 @@ private:
     // CRT 管线
     sf::RenderTexture m_renderTexture;
     sf::Shader m_crtShader;
+    CRTParams m_crtParams;
     bool m_shaderLoaded = false;
     float m_shaderTime = 0.0f;
 
