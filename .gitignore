@@ -17,6 +17,8 @@ build/
 *.vcxproj.filters
 *.vcxproj.user
 
+docs/
+
 .DS_Store
 Thumbs.db
 
