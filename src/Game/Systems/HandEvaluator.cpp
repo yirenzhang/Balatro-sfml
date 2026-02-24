@@ -16,9 +16,9 @@ static const std::map<PokerHandType, std::pair<int, int>> BASE_STATS = {
     {PokerHandType::RoyalFlush,    {100, 8}}
 };
 
-HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
+HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
     HandResult result;
-    result.scoring_cards = hand; // 默认所有牌都计分 (后续修正)
+    result.scoring_snapshots = hand;
     
     if (hand.empty()) {
         result.type = PokerHandType::HighCard;
@@ -29,17 +29,17 @@ HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
     }
 
     // 1. 排序 (按 Rank 从小到大)
-    std::vector<Card*> sorted = hand;
-    std::sort(sorted.begin(), sorted.end(), [](Card* a, Card* b) {
-        return a->getRank() < b->getRank();
+    std::vector<CardSnapshot> sorted = hand;
+    std::sort(sorted.begin(), sorted.end(), [](const CardSnapshot& a, const CardSnapshot& b) {
+        return a.rank < b.rank;
     });
 
     // 2. 统计点数频率 (用于判断对子、三条等)
     std::map<Rank, int> rank_counts;
     std::map<Suit, int> suit_counts;
-    for (auto* c : sorted) {
-        rank_counts[c->getRank()]++;
-        suit_counts[c->getSuit()]++;
+    for (const auto& c : sorted) {
+        rank_counts[c.rank]++;
+        suit_counts[c.suit]++;
     }
 
     // 3. 核心判断逻辑
@@ -62,7 +62,7 @@ HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
     // --- 判定树 ---
     if (straight && flush) {
         // 判断是否是皇家同花顺 (最大牌是 Ace 且是顺子)
-        if (sorted.back()->getRank() == Rank::Ace && sorted.front()->getRank() == Rank::Ten) {
+        if (sorted.back().rank == Rank::Ace && sorted.front().rank == Rank::Ten) {
              result.type = PokerHandType::RoyalFlush;
              result.name = "Royal Flush";
         } else {
@@ -74,8 +74,12 @@ HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
         result.type = PokerHandType::FourOfAKind;
         result.name = "4 of a Kind";
         // 修正计分牌：只保留那4张一样的
-        result.scoring_cards.clear();
-        for(auto* c : hand) if(rank_counts[c->getRank()] == 4) result.scoring_cards.push_back(c);
+        result.scoring_snapshots.clear();
+        for (const auto& c : hand) {
+            if (rank_counts[c.rank] == 4) {
+                result.scoring_snapshots.push_back(c);
+            }
+        }
     }
     else if (three_count > 0 && pair_count > 0) {
         result.type = PokerHandType::FullHouse;
@@ -92,27 +96,41 @@ HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
     else if (three_count > 0) {
         result.type = PokerHandType::ThreeOfAKind;
         result.name = "3 of a Kind";
-        result.scoring_cards.clear();
-        for(auto* c : hand) if(rank_counts[c->getRank()] == 3) result.scoring_cards.push_back(c);
+        result.scoring_snapshots.clear();
+        for (const auto& c : hand) {
+            if (rank_counts[c.rank] == 3) {
+                result.scoring_snapshots.push_back(c);
+            }
+        }
     }
     else if (pair_count >= 2) {
         result.type = PokerHandType::TwoPair;
         result.name = "Two Pair";
-        result.scoring_cards.clear();
-        for(auto* c : hand) if(rank_counts[c->getRank()] == 2) result.scoring_cards.push_back(c);
+        result.scoring_snapshots.clear();
+        for (const auto& c : hand) {
+            if (rank_counts[c.rank] == 2) {
+                result.scoring_snapshots.push_back(c);
+            }
+        }
     }
     else if (pair_count == 1) {
         result.type = PokerHandType::Pair;
         result.name = "Pair";
-        result.scoring_cards.clear();
-        for(auto* c : hand) if(rank_counts[c->getRank()] == 2) result.scoring_cards.push_back(c);
+        result.scoring_snapshots.clear();
+        for (const auto& c : hand) {
+            if (rank_counts[c.rank] == 2) {
+                result.scoring_snapshots.push_back(c);
+            }
+        }
     }
     else {
         result.type = PokerHandType::HighCard;
         result.name = "High Card";
         // High Card 只计最大的那一张
-        result.scoring_cards.clear();
-        if (!sorted.empty()) result.scoring_cards.push_back(sorted.back());
+        result.scoring_snapshots.clear();
+        if (!sorted.empty()) {
+            result.scoring_snapshots.push_back(sorted.back());
+        }
     }
 
     // 4. 填充基础数值
@@ -124,31 +142,31 @@ HandResult HandEvaluator::Evaluate(const std::vector<Card*>& hand) {
     return result;
 }
 
-bool HandEvaluator::isFlush(const std::vector<Card*>& hand) {
+bool HandEvaluator::isFlush(const std::vector<CardSnapshot>& hand) {
     if (hand.size() < 5) return false;
-    Suit firstSuit = hand[0]->getSuit();
-    for (auto* c : hand) {
-        if (c->getSuit() != firstSuit) return false;
+    Suit firstSuit = hand[0].suit;
+    for (const auto& c : hand) {
+        if (c.suit != firstSuit) return false;
     }
     return true;
 }
 
-bool HandEvaluator::isStraight(const std::vector<Card*>& hand) {
+bool HandEvaluator::isStraight(const std::vector<CardSnapshot>& hand) {
     if (hand.size() < 5) return false;
     // 假设已排序
     
     // 特殊情况：A, 2, 3, 4, 5 (Ace is low)
     // hand[0]=2, ..., hand[3]=5, hand[4]=Ace
-    bool lowAceStraight = (hand.back()->getRank() == Rank::Ace && 
-                           hand[0]->getRank() == Rank::Two && 
-                           hand[1]->getRank() == Rank::Three && 
-                           hand[2]->getRank() == Rank::Four && 
-                           hand[3]->getRank() == Rank::Five);
+    bool lowAceStraight = (hand.back().rank == Rank::Ace &&
+                           hand[0].rank == Rank::Two &&
+                           hand[1].rank == Rank::Three &&
+                           hand[2].rank == Rank::Four &&
+                           hand[3].rank == Rank::Five);
     if (lowAceStraight) return true;
 
     // 普通情况
     for (size_t i = 0; i < hand.size() - 1; ++i) {
-        int diff = static_cast<int>(hand[i+1]->getRank()) - static_cast<int>(hand[i]->getRank());
+        int diff = static_cast<int>(hand[i + 1].rank) - static_cast<int>(hand[i].rank);
         if (diff != 1) return false;
     }
     return true;

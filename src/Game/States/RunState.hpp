@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IGameState.hpp"
+#include "../Systems/CardSnapshot.hpp"
 #include <vector>
 
 // 前置声明，减少头文件依赖
@@ -41,5 +42,5 @@ private:
      * * @param game 游戏核心实例
      * @param selected 玩家选中的卡牌列表
      */
-    void playHand(Game& game, std::vector<Card*> selected);
+    void playHand(Game& game, std::vector<CardSnapshot> selected);
 };

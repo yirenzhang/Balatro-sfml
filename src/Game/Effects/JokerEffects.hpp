@@ -33,12 +33,9 @@ public:
         : m_amount(amount), m_suit(suit), m_suitName(suitName) {}
 
     std::optional<EffectResult> Calculate([[maybe_unused]] const Card& self, const EffectContext& ctx) override {
-        // Lua: if context.individual and context.cardarea == G.play then
-        //      if context.other_card:is_suit(...) then ...
-        
-        if (ctx.trigger == TriggerType::Individual && ctx.other_card != nullptr) {
-            // 检查正在计分的那张牌是否符合花色
-            if (ctx.other_card->getSuit() == m_suit) {
+        // Lua: if context.individual and context.cardarea == G.play then ...
+        if (ctx.trigger == TriggerType::Individual) {
+            if (ctx.has_other_card_snapshot && ctx.other_card_snapshot.suit == m_suit) {
                 EffectResult res;
                 res.triggered = true;
                 res.mult_add = m_amount;
@@ -92,11 +89,9 @@ public:
 
     std::optional<EffectResult> Calculate([[maybe_unused]] const Card& self, const EffectContext& ctx) override {
         // 检查触发时机：必须是弃牌阶段 (OnDiscard)
-        // 并且必须是针对单张牌 (Individual，此时 other_card 不为空)
-        if (ctx.trigger == TriggerType::OnDiscard && ctx.other_card != nullptr) {
-            
-            // 检查被弃掉的牌是否符合条件
-            if (ctx.other_card->getRank() == m_targetRank) {
+        // 并且必须是针对单张牌
+        if (ctx.trigger == TriggerType::OnDiscard) {
+            if (ctx.has_other_card_snapshot && ctx.other_card_snapshot.rank == m_targetRank) {
                 EffectResult res;
                 res.triggered = true;
                 res.dollars_add = m_dollars;

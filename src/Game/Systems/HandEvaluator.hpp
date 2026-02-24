@@ -3,7 +3,8 @@
 #include <string>
 #include <map>
 #include <algorithm>
-#include "../Objects/Card.hpp"
+#include "../Objects/CardModel.hpp"
+#include "CardSnapshot.hpp"
 
 // Balatro 的标准牌型
 enum class PokerHandType {
@@ -29,17 +30,17 @@ struct HandResult {
     int base_chips;
     int base_mult;
     
-    // 此次出牌中实际计分的牌 (例如两对只计算那4张牌，高牌不计分)
-    std::vector<Card*> scoring_cards; 
+    // 轻量快照，供规则层使用，避免直接依赖渲染对象
+    std::vector<CardSnapshot> scoring_snapshots;
 };
 
 class HandEvaluator {
 public:
     // 核心函数：输入一组牌，返回牌型和计分数据
-    static HandResult Evaluate(const std::vector<Card*>& hand);
+    static HandResult Evaluate(const std::vector<CardSnapshot>& hand);
 
 private:
     // 辅助检查函数
-    static bool isFlush(const std::vector<Card*>& hand);
-    static bool isStraight(const std::vector<Card*>& hand);
+    static bool isFlush(const std::vector<CardSnapshot>& hand);
+    static bool isStraight(const std::vector<CardSnapshot>& hand);
 };

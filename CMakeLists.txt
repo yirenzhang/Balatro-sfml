@@ -11,7 +11,7 @@ find_package(SFML 2.5 COMPONENTS graphics window system audio REQUIRED)
 
 set(JSON_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/nlohmann_json/include")
 
-file(GLOB_RECURSE PROJECT_SOURCES "src/*.cpp" "src/*.hpp")
+file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.hpp")
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 

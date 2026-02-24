@@ -3,7 +3,7 @@
 #include "../Core/Game.hpp"
 #include "../Systems/HandEvaluator.hpp"
 #include "../Systems/ScoringManager.hpp"
-#include "../Systems/ResourceManager.hpp"
+#include "../Systems/CardSnapshotUtils.hpp"
 #include <iostream>
 
 void RunState::onEnter(Game& game) {
@@ -20,9 +20,9 @@ void RunState::onEnter(Game& game) {
     if (ctx.targetScore == 0) ctx.targetScore = 300; 
 
     // 清空手牌区
-    if (ctx.area_hand) {
-        while (!ctx.area_hand->getCards().empty()) {
-            ctx.area_hand->removeCard(0);
+    if (ctx.hasHandArea()) {
+        while (!ctx.handArea().getCards().empty()) {
+            ctx.handArea().removeCard(0);
         }
     }
 
@@ -44,10 +44,11 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
     if (event.type == sf::Event::KeyPressed) {
         // 1. 弃牌 (D)
         if (event.key.code == sf::Keyboard::D) {
-            auto selected = ctx.area_hand->getSelectedCards();
-            if (!selected.empty() && ctx.discardsLeft > 0) {
+            auto discardedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
+            if (!discardedSnapshots.empty() && ctx.discardsLeft > 0) {
+
                 // 计算弃牌效果
-                ScoreSummary discardSummary = ScoringManager::CalculateDiscardEffect(selected, ctx.area_jokers);
+                ScoreSummary discardSummary = ScoringManager::CalculateDiscardEffect(discardedSnapshots, &ctx.jokerArea());
                 // 应用效果 (加钱)
                 if (discardSummary.dollars > 0) {
                     ctx.money += discardSummary.dollars;
@@ -65,9 +66,9 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
 
         // 2. 出牌 (Enter)
         if (event.key.code == sf::Keyboard::Enter) {
-            auto selected = ctx.area_hand->getSelectedCards();
-            if (!selected.empty() && ctx.handsLeft > 0) {
-                playHand(game, selected);
+            auto selectedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
+            if (!selectedSnapshots.empty() && ctx.handsLeft > 0) {
+                playHand(game, std::move(selectedSnapshots));
             }
         }
 
@@ -93,13 +94,13 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
 
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
         sf::Vector2f mousePos = game.getWindow().mapPixelToCoords(sf::Mouse::getPosition(game.getWindow()));
-        if (ctx.area_hand) {
-            auto clickedCard = ctx.area_hand->getCardAt(mousePos.x, mousePos.y);
+        if (ctx.hasHandArea()) {
+            auto clickedCard = ctx.handArea().getCardAt(mousePos.x, mousePos.y);
             if (clickedCard) {
                 // 处理多选逻辑：如果已选则取消，未选且未满5张则选中
                 if (clickedCard->isSelected()) {
                     clickedCard->toggleSelect();
-                } else if (ctx.area_hand->getSelectedCards().size() < 5) {
+                } else if (CardSnapshotUtils::BuildSelected(ctx.handArea()).size() < 5) {
                     clickedCard->toggleSelect();
                 }
             }
@@ -110,12 +111,12 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
 void RunState::update(Game& game, float dt) {
     GameContext& ctx = game.getContext();
     
-    if (ctx.area_hand) ctx.area_hand->update(dt);
+    if (ctx.hasHandArea()) ctx.handArea().update(dt);
 
     // 实时更新牌型信息 UI
-    auto selected = ctx.area_hand->getSelectedCards();
-    if (!selected.empty()) {
-        HandResult res = HandEvaluator::Evaluate(selected);
+    auto selectedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
+    if (!selectedSnapshots.empty()) {
+        HandResult res = HandEvaluator::Evaluate(selectedSnapshots);
         game.getUI().updateHandInfo(res.name, 1, res.base_chips, res.base_mult);
     } else {
         game.getUI().updateHandInfo("", 0, 0, 0);
@@ -124,18 +125,18 @@ void RunState::update(Game& game, float dt) {
 
 void RunState::draw(Game& game, sf::RenderTarget& target) {
     GameContext& ctx = game.getContext();
-    if (ctx.area_hand) {
-        ctx.area_hand->draw(target);
+    if (ctx.hasHandArea()) {
+        ctx.handArea().draw(target);
     }
 }
 
 void RunState::refillHand(Game& game) {
     GameContext& ctx = game.getContext();
-    if (!ctx.area_hand) return;
+    if (!ctx.hasHandArea() || !ctx.hasResources()) return;
 
-    int currentCount = (int)ctx.area_hand->getCards().size();
+    int currentCount = (int)ctx.handArea().getCards().size();
     int needed = GameContext::HAND_SIZE_LIMIT - currentCount;
-    sf::Texture& deckTex = ResourceManager::Instance().getTexture("deck");
+    sf::Texture& deckTex = ctx.res().getTexture("deck");
 
     for (int i = 0; i < needed; ++i) {
         auto cardDataOpt = ctx.deck.draw();
@@ -149,32 +150,39 @@ void RunState::refillHand(Game& game) {
         
         // 简单的发牌动画起点位置
         card->setInstantPosition(1100.0f, 700.0f);
-        ctx.area_hand->addCard(card);
+        ctx.handArea().addCard(card);
     }
-    ctx.area_hand->alignCards();
+    ctx.handArea().alignCards();
 }
 
 void RunState::removeSelectedCards(GameContext& ctx) {
-    auto& cards = ctx.area_hand->getCards();
+    auto& cards = ctx.handArea().getCards();
     for (int i = cards.size() - 1; i >= 0; --i) {
-        if (cards[i]->isSelected()) ctx.area_hand->removeCard(i);
+        if (cards[i]->isSelected()) ctx.handArea().removeCard(i);
     }
 }
 
-void RunState::playHand(Game& game, std::vector<Card*> selected) {
+void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
     GameContext& ctx = game.getContext();
-    
+
     // 1. 评估牌型
     HandResult handRes = HandEvaluator::Evaluate(selected);
     
     // 2. 计算最终得分
-    ScoreSummary summary = ScoringManager::CalculateFinalScore(handRes, ctx.area_hand, ctx.area_jokers);
+    ScoreSummary summary = ScoringManager::CalculateFinalScore(
+        handRes.base_chips,
+        handRes.base_mult,
+        handRes.scoring_snapshots,
+        &ctx.handArea(),
+        &ctx.jokerArea()
+    );
     
     // 3. 生成视觉反馈 (飘字)
-    for (Card* card : selected) {
-        sf::Vector2f pos = card->getPosition();
+    for (const auto& card : selected) {
+        if (!card.source) continue;
+        sf::Vector2f pos = card.source->getPosition();
         pos.y -= 180.0f;
-        game.spawnFloatingText("+" + std::to_string(card->getChips()), pos, sf::Color(100, 150, 255));
+        game.spawnFloatingText("+" + std::to_string(card.chips), pos, sf::Color(100, 150, 255));
     }
     game.spawnFloatingText(handRes.name, sf::Vector2f(640, 300), sf::Color::White);
 

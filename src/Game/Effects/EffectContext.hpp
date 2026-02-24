@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
-#include "../Objects/Card.hpp"
+#include "../Systems/CardSnapshot.hpp"
 
 class CardArea;
 
@@ -30,13 +30,14 @@ struct EffectResult {
 struct EffectContext {
     TriggerType trigger;
     
-    std::vector<Card*> scoring_cards; 
+    std::vector<CardSnapshot> scoring_snapshots;
     CardArea* joker_area = nullptr;
     
     // [新增] 引用手牌区，方便计算“手中持有的牌”
     CardArea* hand_area = nullptr;   
 
-    Card* other_card = nullptr; 
+    CardSnapshot other_card_snapshot;
+    bool has_other_card_snapshot = false;
 
     int current_chips = 0;
     int current_mult = 0;

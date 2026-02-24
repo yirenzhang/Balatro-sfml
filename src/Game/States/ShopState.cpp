@@ -51,7 +51,7 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
         sf::Vector2f mousePos = game.getWindow().mapPixelToCoords(sf::Mouse::getPosition(game.getWindow()));
         
         // 情况 A: 点击 Joker 区 (可能涉及替换)
-        auto clickedJoker = ctx.area_jokers->getCardAt(mousePos.x, mousePos.y);
+        auto clickedJoker = ctx.jokerArea().getCardAt(mousePos.x, mousePos.y);
         
         // [关键] 尝试锁定 weak_ptr 获取可用的 shared_ptr
         // 如果对象存在，pendingCard 将非空；如果已被销毁，则为空。
@@ -63,41 +63,41 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
                 ctx.money -= cost;
                 
                 // 1. 移除 Joker 区旧卡
-                ctx.area_jokers->takeCard(clickedJoker.get());
+                ctx.jokerArea().takeCard(clickedJoker.get());
                 
                 // 2. 从商店区获取新卡所有权并放入 Joker 区
-                if (auto newCard = ctx.area_shop->takeCard(pendingCard.get())) {
+                if (auto newCard = ctx.shopArea().takeCard(pendingCard.get())) {
                     newCard->setColor(sf::Color::White);
-                    ctx.area_jokers->addCard(newCard);
+                    ctx.jokerArea().addCard(newCard);
                 }
 
                 // 3. 重置状态
                 m_pendingPurchase.reset();
                 ui.setShopMessage("SHOP PHASE\n[Left Click] Buy Joker\n[N] Next Round", sf::Color::Yellow);
                 
-                ctx.area_jokers->alignCards();
-                ctx.area_shop->alignCards();
+                ctx.jokerArea().alignCards();
+                ctx.shopArea().alignCards();
             }
             return;
         }
 
         // 情况 B: 点击 商店 区 (购买逻辑)
-        auto clickedShopCard = ctx.area_shop->getCardAt(mousePos.x, mousePos.y);
+        auto clickedShopCard = ctx.shopArea().getCardAt(mousePos.x, mousePos.y);
         if (clickedShopCard) {
             int cost = clickedShopCard->getCost();
             
             // 钱不够直接忽略
             if (ctx.money < cost) return;
 
-            int jokerCount = (int)ctx.area_jokers->getCards().size();
+            int jokerCount = (int)ctx.jokerArea().getCards().size();
             
             // 槽位未满 -> 直接购买
             if (jokerCount < 5) {
                 ctx.money -= cost;
                 
-                if (auto newCard = ctx.area_shop->takeCard(clickedShopCard.get())) {
+                if (auto newCard = ctx.shopArea().takeCard(clickedShopCard.get())) {
                     newCard->setColor(sf::Color::White);
-                    ctx.area_jokers->addCard(newCard);
+                    ctx.jokerArea().addCard(newCard);
                 }
                 
                 // 如果之前有选中的卡，取消其高亮（如果它还活着）
@@ -107,8 +107,8 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
                 m_pendingPurchase.reset();
 
                 ui.setShopMessage("SHOP PHASE\n[Left Click] Buy Joker\n[N] Next Round", sf::Color::Yellow);
-                ctx.area_jokers->alignCards();
-                ctx.area_shop->alignCards();
+                ctx.jokerArea().alignCards();
+                ctx.shopArea().alignCards();
             }
             // 槽位已满 -> 选中该卡，提示玩家选择替换对象
             else {
@@ -139,11 +139,11 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
 void ShopState::update(Game& game, float dt) {
     GameContext& ctx = game.getContext();
     
-    if (ctx.area_shop) ctx.area_shop->update(dt);
+    if (ctx.hasShopArea()) ctx.shopArea().update(dt);
     // [关键] 安全的呼吸灯效果
     // 先锁定，确认对象存在后再操作
     if (auto pendingCard = m_pendingPurchase.lock()) {
-         if (ctx.area_shop) {
+         if (ctx.hasShopArea()) {
              static float time = 0.0f;
              time += dt;
              float flash = (std::sin(time * 10.0f) + 1.0f) * 0.5f; 
@@ -152,7 +152,7 @@ void ShopState::update(Game& game, float dt) {
              pendingCard->setColor(sf::Color(255, gb, gb)); 
              
              // 确保其他卡片颜色正常
-             for (auto& card : ctx.area_shop->getCards()) {
+             for (auto& card : ctx.shopArea().getCards()) {
                 if (card != pendingCard) card->setColor(sf::Color::White);
              }
          }
@@ -161,22 +161,19 @@ void ShopState::update(Game& game, float dt) {
 
 void ShopState::draw(Game& game, sf::RenderTarget& target) {
     GameContext& ctx = game.getContext();
-    if (ctx.area_shop) ctx.area_shop->draw(target);
-    
-    // 绘制商店特定 UI
-    game.getUI().draw(target, GameState::Shop);
+    if (ctx.hasShopArea()) ctx.shopArea().draw(target);
 }
 
 void ShopState::restockShop(Game& game) {
     GameContext& ctx = game.getContext();
-    if (!ctx.area_shop) return;
+    if (!ctx.hasShopArea() || !ctx.hasDatabase()) return;
     
     // 清空当前商品
-    while (!ctx.area_shop->getCards().empty()) ctx.area_shop->removeCard(0);
+    while (!ctx.shopArea().getCards().empty()) ctx.shopArea().removeCard(0);
 
     // [优化] 动态获取所有 Joker ID
     // 这样只要 jokers.json 里有的牌，都有机会刷出来
-    std::vector<std::string> jokerPool = GameDatabase::Instance().getAllJokerIds();
+    std::vector<std::string> jokerPool = ctx.db().getAllJokerIds();
     
     // 安全检查：如果 JSON 加载失败导致池子为空，直接返回防止除零错误
     if (jokerPool.empty()) {
@@ -187,9 +184,9 @@ void ShopState::restockShop(Game& game) {
     // 随机生成 3 张 Joker
     for (int i = 0; i < 3; ++i) {
         std::string id = jokerPool[std::rand() % jokerPool.size()];
-        if (auto card = GameDatabase::Instance().createJoker(id)) {
-            ctx.area_shop->addCard(card);
+        if (auto card = ctx.db().createJoker(id)) {
+            ctx.shopArea().addCard(card);
         }
     }
-    ctx.area_shop->alignCards();
+    ctx.shopArea().alignCards();
 }

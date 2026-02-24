@@ -2,16 +2,12 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 #include "../Core/GameContext.hpp"
-#include "../Systems/ResourceManager.hpp"
 
 class UIManager {
 public:
     UIManager() = default;
 
-    void init() {
-        // 从资源管理器获取字体
-        sf::Font& font = ResourceManager::Instance().getFont("main");
-
+    void init(const sf::Font& font) {
         // --- 1. HUD 初始化 ---
         setupText(m_textHUD, 30, sf::Color::White, {40.0f, 200.0f}, font);
         setupText(m_textScore, 30, sf::Color::White, {40.0f, 240.0f}, font);

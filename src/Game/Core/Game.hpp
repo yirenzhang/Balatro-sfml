@@ -6,7 +6,9 @@
 
 // 引入核心组件
 #include "GameContext.hpp"
-#include "../States/IGameState.hpp"
+#include "StateMachine.hpp"
+#include "../Systems/GameDatabase.hpp"
+#include "../Systems/ResourceManager.hpp"
 #include "../UI/UIManager.hpp"
 #include "../UI/Tooltip.hpp"
 #include "../UI/FloatingText.hpp"
@@ -68,6 +70,8 @@ private:
 
     // --- 核心数据 ---
     GameContext m_ctx;
+    ResourceManager m_resources;
+    GameDatabase m_database;
 
     // --- 场景对象 (持有权在 Game，Context 持有引用) ---
     std::shared_ptr<CardArea> m_handArea;
@@ -80,5 +84,5 @@ private:
     std::shared_ptr<Card> m_hoveredCard = nullptr;
 
     // --- 当前状态 (状态机) ---
-    std::unique_ptr<IGameState> m_currentState;
+    StateMachine m_stateMachine;
 };

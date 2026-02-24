@@ -1,7 +1,7 @@
 #include "Game.hpp"
 #include "../States/RunState.hpp"
-#include "../States/ShopState.hpp"
 #include "../Systems/GameDatabase.hpp"
+#include "../Systems/ResourceManager.hpp"
 #include <iostream>
 #include <ctime>
 #include <algorithm>
@@ -15,13 +15,7 @@ Game::Game() {
 
 // [New] 状态切换核心函数
 void Game::changeState(std::unique_ptr<IGameState> newState) {
-    if (m_currentState) {
-        m_currentState->onExit(*this);
-    }
-    m_currentState = std::move(newState);
-    if (m_currentState) {
-        m_currentState->onEnter(*this);
-    }
+    m_stateMachine.changeState(*this, std::move(newState));
 }
 
 void Game::initWindow() {
@@ -31,7 +25,13 @@ void Game::initWindow() {
 }
 
 void Game::initResources() {
-    auto& res = ResourceManager::Instance();
+    auto& res = m_resources;
+    auto& db = m_database;
+
+    m_ctx.resources = &res;
+    m_ctx.database = &db;
+    db.setResourceManager(&res);
+
     // Shader 加载 (省略参数设置细节，与之前一致)
     if (m_crtShader.loadFromFile("assets/shaders/CRT.fs", sf::Shader::Fragment)) {
         m_shaderLoaded = true;
@@ -45,11 +45,16 @@ void Game::initResources() {
     res.loadTexture("jokers", "assets/textures/1x/Jokers.png");
     if(!res.loadFont("main", "assets/fonts/m6x11plus.ttf")) res.loadFont("main", "C:/Windows/Fonts/arial.ttf");
 
-    GameDatabase::Instance().loadRanks("assets/data/ranks.json");
-    GameDatabase::Instance().loadJokers("assets/data/jokers.json");
+    db.loadRanks("assets/data/ranks.json");
+    db.loadJokers("assets/data/jokers.json");
+    m_ctx.deck.setRankChipProvider(
+        [dbPtr = m_ctx.database](Rank rank) {
+            return dbPtr ? dbPtr->getRankChips(rank) : 0;
+        }
+    );
 
     // UI 初始化
-    m_ui.init();
+    m_ui.init(res.getFont("main"));
     m_tooltip.init(res.getFont("main"));
 }
 
@@ -91,8 +96,8 @@ void Game::processEvents() {
         if (event.type == sf::Event::Closed) m_window.close();
         
         // [New] 委托给当前状态处理事件
-        if (m_currentState) {
-            m_currentState->handleEvent(*this, event);
+        if (auto* state = m_stateMachine.currentState()) {
+            state->handleEvent(*this, event);
         }
     }
 }
@@ -114,8 +119,8 @@ void Game::update(float dt) {
     // 必须调用 m_jokerArea->update，否则动画不播放
     if (m_jokerArea) m_jokerArea->update(dt);
 
-    if (m_currentState) {
-        m_currentState->update(*this, dt);
+    if (auto* state = m_stateMachine.currentState()) {
+        state->update(*this, dt);
     }
 
     // 3. UI 更新
@@ -176,8 +181,8 @@ void Game::render() {
     if (m_jokerArea) m_jokerArea->draw(m_renderTexture);
 
     // 2. 绘制状态特定内容
-    if (m_currentState) {
-        m_currentState->draw(*this, m_renderTexture);
+    if (auto* state = m_stateMachine.currentState()) {
+        state->draw(*this, m_renderTexture);
     }
 
     // 3. 绘制特效
@@ -185,7 +190,7 @@ void Game::render() {
 
     // 4. [重要] 绘制 UI 和 Tooltip 到 RenderTexture
     // 这样 UI 也会有 CRT 效果 (这符合 Balatro 风格)
-    if (m_currentState) {
+    if (m_stateMachine.currentState()) {
         // 修正：让 UI 画在 texture 上，而不是 window 上
         // 这需要你的 UIManager::draw 支持 sf::RenderTarget& 参数 (之前已做过修改)
         m_ui.draw(m_renderTexture, m_ctx.state);
@@ -239,5 +244,6 @@ void Game::render() {
 }
 
 void Game::spawnFloatingText(const std::string& text, sf::Vector2f pos, sf::Color color) {
-    m_effects.emplace_back(text, pos, color, ResourceManager::Instance().getFont("main"));
+    if (!m_ctx.resources) return;
+    m_effects.emplace_back(text, pos, color, m_ctx.resources->getFont("main"));
 }

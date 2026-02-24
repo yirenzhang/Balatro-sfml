@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <random>
 #include <optional>
+#include <functional>
 #include "../Objects/Card.hpp" // 为了使用 Suit 和 Rank 枚举
-#include "../Systems/GameDatabase.hpp" // 为了获取初始筹码值
 
 // 轻量级结构，仅存储数据，不涉及渲染
 struct CardData {
@@ -19,8 +19,12 @@ struct CardData {
 
 class Deck {
 public:
-    Deck() {
-        
+    using RankChipProvider = std::function<int(Rank)>;
+
+    Deck() = default;
+
+    void setRankChipProvider(RankChipProvider provider) {
+        m_rankChipProvider = std::move(provider);
     }
 
     // 初始化标准 52 张牌
@@ -31,8 +35,7 @@ public:
                 CardData data;
                 data.suit = (Suit)s;
                 data.rank = (Rank)r;
-                // 从数据库查询该点数的默认筹码值
-                data.baseChips = GameDatabase::Instance().getRankChips(data.rank);
+                data.baseChips = getBaseChips(data.rank);
                 m_cards.push_back(data);
             }
         }
@@ -65,10 +68,18 @@ public:
         CardData data;
         data.suit = s;
         data.rank = r;
-        data.baseChips = GameDatabase::Instance().getRankChips(r);
+        data.baseChips = getBaseChips(r);
         m_cards.push_back(data);
     }
 
 private:
+    int getBaseChips(Rank rank) const {
+        if (m_rankChipProvider) {
+            return m_rankChipProvider(rank);
+        }
+        return 0;
+    }
+
     std::vector<CardData> m_cards;
+    RankChipProvider m_rankChipProvider;
 };
