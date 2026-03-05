@@ -7,14 +7,18 @@
 // 引入核心组件
 #include "GameContext.hpp"
 #include "StateMachine.hpp"
+#include "InputRouter.hpp"
+#include "RenderPipeline.hpp"
+#include "SceneCoordinator.hpp"
+#include "HoverTooltipController.hpp"
 #include "../Systems/GameDatabase.hpp"
 #include "../Systems/ResourceManager.hpp"
 #include "../UI/UIManager.hpp"
 #include "../UI/Tooltip.hpp"
 #include "../UI/FloatingText.hpp"
 #include "../Objects/CardArea.hpp"
-#include "../Objects/Card.hpp" 
 #include "../Data/CRTParams.hpp"
+#include "../Systems/StartupPolicy.hpp"
 
 class Game {
 public:
@@ -45,27 +49,22 @@ public:
 
 private:
     void initWindow();
-    void initResources();
+    bool initResources();
     void initScene();
 
     void processEvents();
     void update(float dt);
     void render();
 
-    // --- 渲染相关 ---
     sf::RenderWindow m_window;
-    
-    // CRT 管线
-    sf::RenderTexture m_renderTexture;
-    sf::Shader m_crtShader;
+    InputRouter m_inputRouter;
+    RenderPipeline m_renderPipeline;
     CRTParams m_crtParams;
-    bool m_shaderLoaded = false;
-    float m_shaderTime = 0.0f;
 
     // --- UI & 特效 ---
     UIManager m_ui;
     Tooltip m_tooltip;
-    bool m_showTooltip = false;
+    HoverTooltipController m_hoverTooltip;
     std::vector<FloatingText> m_effects;
 
     // --- 核心数据 ---
@@ -73,16 +72,10 @@ private:
     ResourceManager m_resources;
     GameDatabase m_database;
 
-    // --- 场景对象 (持有权在 Game，Context 持有引用) ---
-    std::shared_ptr<CardArea> m_handArea;
-    std::shared_ptr<CardArea> m_jokerArea;
-    std::shared_ptr<CardArea> m_shopArea;
-    
-    // --- 交互状态 ---
-    // 鼠标当前悬停的卡牌 (用于 Tooltip 和 缩放动画)
-    // [修复] 这是之前报错未定义的变量
-    std::shared_ptr<Card> m_hoveredCard = nullptr;
+    // --- 场景对象协调器 ---
+    SceneCoordinator m_scene;
 
     // --- 当前状态 (状态机) ---
     StateMachine m_stateMachine;
+    bool m_bootstrapReady = true;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include "BasicStateMachine.hpp"
 #include "../States/IGameState.hpp"
 
 class Game;
@@ -8,19 +9,11 @@ class Game;
 class StateMachine {
 public:
     void changeState(Game& game, std::unique_ptr<IGameState> newState) {
-        if (m_currentState) {
-            m_currentState->onExit(game);
-        }
-
-        m_currentState = std::move(newState);
-
-        if (m_currentState) {
-            m_currentState->onEnter(game);
-        }
+        m_machine.changeState(game, std::move(newState));
     }
 
-    IGameState* currentState() const { return m_currentState.get(); }
+    IGameState* currentState() const { return m_machine.currentState(); }
 
 private:
-    std::unique_ptr<IGameState> m_currentState;
+    BasicStateMachine<Game, IGameState> m_machine;
 };
