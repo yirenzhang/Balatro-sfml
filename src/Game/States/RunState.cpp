@@ -3,6 +3,7 @@
 #include "../Core/Game.hpp"
 #include "../Systems/HandEvaluator.hpp"
 #include "../Systems/ScoringManager.hpp"
+#include "../Systems/RunFlow.hpp"
 #include "../Systems/CardSnapshotUtils.hpp"
 #include <iostream>
 
@@ -32,6 +33,7 @@ void RunState::onEnter(Game& game) {
 
     // 发牌
     refillHand(game);
+    markSelectionDirty();
 }
 
 void RunState::onExit([[maybe_unused]] Game& game) {
@@ -44,52 +46,33 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
     if (event.type == sf::Event::KeyPressed) {
         // 1. 弃牌 (D)
         if (event.key.code == sf::Keyboard::D) {
-            auto discardedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
+            const auto& discardedSnapshots = selectedSnapshots(ctx);
             if (!discardedSnapshots.empty() && ctx.discardsLeft > 0) {
 
                 // 计算弃牌效果
                 ScoreSummary discardSummary = ScoringManager::CalculateDiscardEffect(discardedSnapshots, &ctx.jokerArea());
                 // 应用效果 (加钱)
                 if (discardSummary.dollars > 0) {
-                    ctx.money += discardSummary.dollars;
                     game.spawnFloatingText("+$" + std::to_string(discardSummary.dollars), 
                         sf::Vector2f(200, 600), sf::Color::Yellow);
                     std::cout << "[Effect] Earned $" << discardSummary.dollars << " from discard." << std::endl;
                 }
-                // 执行弃牌动作
-                ctx.discardsLeft--;
+                RunFlow::ApplyDiscard(ctx, discardSummary);
                 removeSelectedCards(ctx);
                 refillHand(game);
+                markSelectionDirty();
                 std::cout << "[Action] Discard used." << std::endl;
             }
         }
 
         // 2. 出牌 (Enter)
         if (event.key.code == sf::Keyboard::Enter) {
-            auto selectedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
-            if (!selectedSnapshots.empty() && ctx.handsLeft > 0) {
-                playHand(game, std::move(selectedSnapshots));
+            auto selected = selectedSnapshots(ctx);
+            if (!selected.empty() && ctx.handsLeft > 0) {
+                playHand(game, std::move(selected));
             }
         }
 
-        // [CHEAT] 按 M 加钱
-        if (event.key.code == sf::Keyboard::M) {
-            ctx.money += 100;
-            // 播放飘字特效，给予视觉反馈
-            game.spawnFloatingText("CHEAT: +$100", sf::Vector2f(1050, 600), sf::Color::Yellow);
-            std::cout << "[CHEAT] Money added. Current: " << ctx.money << std::endl;
-        }
-
-        // [CHEAT] 按 P 加分
-        if (event.key.code == sf::Keyboard::P) {
-            ctx.currentScore += 10000;
-            game.spawnFloatingText("CHEAT: +10,000 Score", sf::Vector2f(200, 240), sf::Color::Magenta);
-            std::cout << "[CHEAT] Score added. Current: " << ctx.currentScore << std::endl;
-
-            // 可选：如果加上分数后超过目标，直接触发过关逻辑吗？
-            // 建议：这里只加分，让玩家手动打出一张牌或者按 Next 来结算，这样更安全。
-            // 如果你想直接过关，可以复制 playHand 里的状态切换代码到这里。
-        }
     }
 
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
@@ -100,8 +83,10 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
                 // 处理多选逻辑：如果已选则取消，未选且未满5张则选中
                 if (clickedCard->isSelected()) {
                     clickedCard->toggleSelect();
-                } else if (CardSnapshotUtils::BuildSelected(ctx.handArea()).size() < 5) {
+                    markSelectionDirty();
+                } else if (selectedSnapshots(ctx).size() < 5) {
                     clickedCard->toggleSelect();
+                    markSelectionDirty();
                 }
             }
         }
@@ -114,9 +99,9 @@ void RunState::update(Game& game, float dt) {
     if (ctx.hasHandArea()) ctx.handArea().update(dt);
 
     // 实时更新牌型信息 UI
-    auto selectedSnapshots = CardSnapshotUtils::BuildSelected(ctx.handArea());
-    if (!selectedSnapshots.empty()) {
-        HandResult res = HandEvaluator::Evaluate(selectedSnapshots);
+    const auto& selected = selectedSnapshots(ctx);
+    if (!selected.empty()) {
+        HandResult res = HandEvaluator::Evaluate(selected);
         game.getUI().updateHandInfo(res.name, 1, res.base_chips, res.base_mult);
     } else {
         game.getUI().updateHandInfo("", 0, 0, 0);
@@ -153,6 +138,7 @@ void RunState::refillHand(Game& game) {
         ctx.handArea().addCard(card);
     }
     ctx.handArea().alignCards();
+    markSelectionDirty();
 }
 
 void RunState::removeSelectedCards(GameContext& ctx) {
@@ -160,6 +146,7 @@ void RunState::removeSelectedCards(GameContext& ctx) {
     for (int i = cards.size() - 1; i >= 0; --i) {
         if (cards[i]->isSelected()) ctx.handArea().removeCard(i);
     }
+    markSelectionDirty();
 }
 
 void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
@@ -186,25 +173,24 @@ void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
     }
     game.spawnFloatingText(handRes.name, sf::Vector2f(640, 300), sf::Color::White);
 
-    // 4. 更新核心数据
-    ctx.currentScore += summary.final_score;
-    ctx.handsLeft--;
-
-    // 5. 清理出的牌并补牌
+    // 4. 清理出的牌并补牌
     removeSelectedCards(ctx);
     refillHand(game);
 
-    // 6. 状态检测：过关或失败
-    if (ctx.currentScore >= ctx.targetScore) {
-        ctx.money += 5; // 基础过关奖励
-        ctx.targetScore = (long long)(ctx.targetScore * 1.5f); // 难度提升
-        
-        // 核心修改点：这里可以安全地包含 ShopState 了
+    // 5. 更新核心数据并检测状态迁移
+    const RoundTransition transition = RunFlow::ApplyPlay(ctx, summary);
+    if (transition == RoundTransition::ToShop) {
         game.changeState(std::make_unique<ShopState>());
-    }
-    else if (ctx.handsLeft <= 0) {
+    } else if (transition == RoundTransition::GameOver) {
         // TODO: 实现 GameOverState
-        // game.changeState(std::make_unique<GameOverState>());
         std::cout << ">>> GAME OVER <<<" << std::endl;
     }
+}
+
+const std::vector<CardSnapshot>& RunState::selectedSnapshots(GameContext& ctx) {
+    if (m_selectionDirty) {
+        m_selectedCache = CardSnapshotUtils::BuildSelected(ctx.handArea());
+        m_selectionDirty = false;
+    }
+    return m_selectedCache;
 }

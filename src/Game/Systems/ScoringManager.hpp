@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include "HandEvaluator.hpp"
+#include "CardSnapshot.hpp"
 #include "../Effects/EffectContext.hpp"
 #include "../Objects/CardArea.hpp"
 
@@ -21,12 +21,6 @@ public:
         int baseMult,
         const std::vector<CardSnapshot>& scoringCards,
         CardArea* handArea,
-        CardArea* jokerArea
-    );
-
-    static ScoreSummary CalculateFinalScore(
-        const HandResult& handResult, 
-        CardArea* handArea, 
         CardArea* jokerArea
     );
 

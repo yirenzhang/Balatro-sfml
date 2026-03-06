@@ -24,6 +24,9 @@ public:
     void draw(Game& game, sf::RenderTarget& target) override;
 
 private:
+    const std::vector<CardSnapshot>& selectedSnapshots(GameContext& ctx);
+    void markSelectionDirty() { m_selectionDirty = true; }
+
     /**
      * 将手牌补充至上限
      * * @param game 游戏核心实例
@@ -43,4 +46,7 @@ private:
      * @param selected 玩家选中的卡牌列表
      */
     void playHand(Game& game, std::vector<CardSnapshot> selected);
+
+    std::vector<CardSnapshot> m_selectedCache;
+    bool m_selectionDirty = true;
 };

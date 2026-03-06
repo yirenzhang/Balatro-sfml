@@ -14,7 +14,7 @@ inline CardSnapshot FromCard(const Card& card) {
         .rank = card.getRank(),
         .chips = card.getChips(),
         .selected = card.isSelected(),
-        .source = const_cast<Card*>(&card)
+        .source = &card
     };
 }
 

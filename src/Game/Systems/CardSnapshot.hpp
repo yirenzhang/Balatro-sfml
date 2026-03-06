@@ -9,5 +9,5 @@ struct CardSnapshot {
     Rank rank = Rank::Two;
     int chips = 0;
     bool selected = false;
-    Card* source = nullptr;
+    const Card* source = nullptr;
 };

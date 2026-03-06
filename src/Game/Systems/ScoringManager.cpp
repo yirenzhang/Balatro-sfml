@@ -4,20 +4,6 @@
 #include "CardSnapshotUtils.hpp"
 
 ScoreSummary ScoringManager::CalculateFinalScore(
-    const HandResult& handResult,
-    CardArea* handArea,
-    CardArea* jokerArea
-) {
-    return CalculateFinalScore(
-        handResult.base_chips,
-        handResult.base_mult,
-        handResult.scoring_snapshots,
-        handArea,
-        jokerArea
-    );
-}
-
-ScoreSummary ScoringManager::CalculateFinalScore(
     int baseChips,
     int baseMult,
     const std::vector<CardSnapshot>& scoringCards,

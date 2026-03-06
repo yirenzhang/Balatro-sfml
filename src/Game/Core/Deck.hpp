@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <algorithm>
+#include <cstddef>
 #include <random>
 #include <optional>
 #include <functional>
@@ -42,7 +43,17 @@ public:
     }
 
     // 洗牌
-    void shuffle() {
+    void shuffle(const std::function<std::size_t(std::size_t)>& pickIndex = {}) {
+        if (m_cards.size() < 2) return;
+
+        if (pickIndex) {
+            for (std::size_t i = m_cards.size() - 1; i > 0; --i) {
+                const std::size_t j = pickIndex(i + 1) % (i + 1);
+                std::swap(m_cards[i], m_cards[j]);
+            }
+            return;
+        }
+
         static std::random_device rd;
         static std::mt19937 g(rd());
         std::shuffle(m_cards.begin(), m_cards.end(), g);

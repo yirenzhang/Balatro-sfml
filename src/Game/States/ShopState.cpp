@@ -2,8 +2,11 @@
 #include "RunState.hpp"
 #include "../Core/Game.hpp"
 #include "../Systems/GameDatabase.hpp"
+#include "../Systems/ShopFlow.hpp"
+#include "../Systems/ShopRestock.hpp"
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 void ShopState::onEnter(Game& game) {
     game.getContext().state = GameState::Shop;
@@ -32,18 +35,10 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
         
         // [R] 刷新商店 (Reroll)
         if (event.key.code == sf::Keyboard::R) {
-            int rerollCost = 5;
-            if (ctx.money >= rerollCost) {
-                ctx.money -= rerollCost;
+            if (ShopFlow::TryReroll(ctx)) {
                 restockShop(game);
                 m_pendingPurchase.reset();
             }
-        }
-
-        // [CHEAT] 按 M 加钱
-        if (event.key.code == sf::Keyboard::M) {
-            ctx.money += 100;
-            game.spawnFloatingText("CHEAT: +$100", sf::Vector2f(1050, 600), sf::Color::Yellow);
         }
     }
 
@@ -59,8 +54,7 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
 
         if (pendingCard && clickedJoker) {
             int cost = pendingCard->getCost();
-            if (ctx.money >= cost) {
-                ctx.money -= cost;
+            if (ShopFlow::TrySpend(ctx, cost)) {
                 
                 // 1. 移除 Joker 区旧卡
                 ctx.jokerArea().takeCard(clickedJoker.get());
@@ -85,15 +79,12 @@ void ShopState::handleEvent(Game& game, const sf::Event& event) {
         auto clickedShopCard = ctx.shopArea().getCardAt(mousePos.x, mousePos.y);
         if (clickedShopCard) {
             int cost = clickedShopCard->getCost();
-            
-            // 钱不够直接忽略
-            if (ctx.money < cost) return;
-
-            int jokerCount = (int)ctx.jokerArea().getCards().size();
+            const auto decision = ShopFlow::EvaluatePurchase(ctx, cost);
+            if (!decision.affordable) return;
             
             // 槽位未满 -> 直接购买
-            if (jokerCount < 5) {
-                ctx.money -= cost;
+            if (!decision.requiresReplace) {
+                if (!ShopFlow::TrySpend(ctx, cost)) return;
                 
                 if (auto newCard = ctx.shopArea().takeCard(clickedShopCard.get())) {
                     newCard->setColor(sf::Color::White);
@@ -181,9 +172,10 @@ void ShopState::restockShop(Game& game) {
         return;
     }
 
+    std::vector<std::string> pickedIds = ShopRestock::PickIdsWithStdRand(jokerPool, 3);
+
     // 随机生成 3 张 Joker
-    for (int i = 0; i < 3; ++i) {
-        std::string id = jokerPool[std::rand() % jokerPool.size()];
+    for (const auto& id : pickedIds) {
         if (auto card = ctx.db().createJoker(id)) {
             ctx.shopArea().addCard(card);
         }
