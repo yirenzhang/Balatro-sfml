@@ -10,6 +10,17 @@
 
 class HoverTooltipController {
 public:
+    /**
+     * 更新悬停状态与提示框。
+     *
+     * 将悬停逻辑独立封装是为了把 Game 的每帧职责收敛到编排层，
+     * 避免交互细节继续膨胀。
+     *
+     * @param window 窗口对象
+     * @param scene 场景协调器
+     * @param ctx 游戏上下文
+     * @param tooltip 提示框对象
+     */
     void update(sf::RenderWindow& window, SceneCoordinator& scene, const GameContext& ctx, Tooltip& tooltip) {
         const sf::Vector2f mousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window));
         auto currentHovered = resolveHoveredCard(scene, ctx, mousePos);
@@ -31,6 +42,11 @@ public:
         }
     }
 
+    /**
+     * 是否应显示提示框。
+     *
+     * @return 是否显示
+     */
     bool showTooltip() const { return m_showTooltip; }
 
 private:

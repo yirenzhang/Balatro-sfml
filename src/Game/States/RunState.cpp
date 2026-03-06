@@ -12,46 +12,44 @@ void RunState::onEnter(Game& game) {
     std::cout << ">>> Enter Run State <<<" << std::endl;
     GameContext& ctx = game.getContext();
     
-    // 重置回合数据
+    // 每次进入运行态都重置回合资源，保证新局面可预测。
     ctx.currentScore = 0;
     ctx.handsLeft = 4;
     ctx.discardsLeft = 3;
 
-    // 如果是第一轮，初始化目标分数
+    // 仅在未设置时回填目标分，避免覆盖外部流程写入的难度值。
     if (ctx.targetScore == 0) ctx.targetScore = 300; 
 
-    // 清空手牌区
+    // 先清手牌再洗牌，避免上一轮残留对象干扰抽牌顺序。
     if (ctx.hasHandArea()) {
         while (!ctx.handArea().getCards().empty()) {
             ctx.handArea().removeCard(0);
         }
     }
 
-    // 洗牌
+    // 运行态入口统一重建牌堆，确保回合起点一致。
     ctx.deck.initStandardDeck();
     ctx.deck.shuffle();
 
-    // 发牌
+    // 进入状态后立即补满手牌，确保玩家始终可操作。
     refillHand(game);
     markSelectionDirty();
 }
 
 void RunState::onExit([[maybe_unused]] Game& game) {
-    // 离开时不需要做太多清理，数据保留在 Context 中
+    // 当前状态数据由上下文托管，此处不主动清理以支持跨状态读取。
 }
 
 void RunState::handleEvent(Game& game, const sf::Event& event) {
     GameContext& ctx = game.getContext();
 
     if (event.type == sf::Event::KeyPressed) {
-        // 1. 弃牌 (D)
+        // 弃牌分支：先结算弃牌触发再执行移除，保持规则触发顺序一致。
         if (event.key.code == sf::Keyboard::D) {
             const auto& discardedSnapshots = selectedSnapshots(ctx);
             if (!discardedSnapshots.empty() && ctx.discardsLeft > 0) {
 
-                // 计算弃牌效果
                 ScoreSummary discardSummary = ScoringManager::CalculateDiscardEffect(discardedSnapshots, &ctx.jokerArea());
-                // 应用效果 (加钱)
                 if (discardSummary.dollars > 0) {
                     game.spawnFloatingText("+$" + std::to_string(discardSummary.dollars), 
                         sf::Vector2f(200, 600), sf::Color::Yellow);
@@ -65,7 +63,7 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
             }
         }
 
-        // 2. 出牌 (Enter)
+        // 出牌分支：仅在有选牌且有手数时进入结算。
         if (event.key.code == sf::Keyboard::Enter) {
             auto selected = selectedSnapshots(ctx);
             if (!selected.empty() && ctx.handsLeft > 0) {
@@ -80,7 +78,7 @@ void RunState::handleEvent(Game& game, const sf::Event& event) {
         if (ctx.hasHandArea()) {
             auto clickedCard = ctx.handArea().getCardAt(mousePos.x, mousePos.y);
             if (clickedCard) {
-                // 处理多选逻辑：如果已选则取消，未选且未满5张则选中
+                // 选择上限为 5，模拟玩法节奏并减少异常牌型输入。
                 if (clickedCard->isSelected()) {
                     clickedCard->toggleSelect();
                     markSelectionDirty();
@@ -98,7 +96,7 @@ void RunState::update(Game& game, float dt) {
     
     if (ctx.hasHandArea()) ctx.handArea().update(dt);
 
-    // 实时更新牌型信息 UI
+    // 每帧预览牌型，给玩家即时反馈，减少试错成本。
     const auto& selected = selectedSnapshots(ctx);
     if (!selected.empty()) {
         HandResult res = HandEvaluator::Evaluate(selected);
@@ -126,14 +124,14 @@ void RunState::refillHand(Game& game) {
     for (int i = 0; i < needed; ++i) {
         auto cardDataOpt = ctx.deck.draw();
         
-        // 牌堆如果空了就停止发牌
+        // 牌堆耗尽时提前终止，防止无效构造导致空牌异常。
         if (!cardDataOpt.has_value()) break;
         
         CardData data = cardDataOpt.value();
         auto card = std::make_shared<Card>(data.suit, data.rank, deckTex);
         card->setChips(data.baseChips);
         
-        // 简单的发牌动画起点位置
+        // 从固定发牌起点入场，保持动画空间一致性。
         card->setInstantPosition(1100.0f, 700.0f);
         ctx.handArea().addCard(card);
     }
@@ -152,10 +150,10 @@ void RunState::removeSelectedCards(GameContext& ctx) {
 void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
     GameContext& ctx = game.getContext();
 
-    // 1. 评估牌型
+    // 先评估牌型，再把结果作为计分输入，保证规则入口单一。
     HandResult handRes = HandEvaluator::Evaluate(selected);
     
-    // 2. 计算最终得分
+    // 计分阶段需要手牌区和 Joker 区共同参与触发链。
     ScoreSummary summary = ScoringManager::CalculateFinalScore(
         handRes.base_chips,
         handRes.base_mult,
@@ -164,7 +162,7 @@ void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
         &ctx.jokerArea()
     );
     
-    // 3. 生成视觉反馈 (飘字)
+    // 结算后再生成反馈，避免视觉与逻辑结果不一致。
     for (const auto& card : selected) {
         if (!card.source) continue;
         sf::Vector2f pos = card.source->getPosition();
@@ -173,16 +171,16 @@ void RunState::playHand(Game& game, std::vector<CardSnapshot> selected) {
     }
     game.spawnFloatingText(handRes.name, sf::Vector2f(640, 300), sf::Color::White);
 
-    // 4. 清理出的牌并补牌
+    // 先移除再补牌，确保手牌数量统计正确。
     removeSelectedCards(ctx);
     refillHand(game);
 
-    // 5. 更新核心数据并检测状态迁移
+    // 统一用 RunFlow 决定迁移，避免状态判断散落在多个分支。
     const RoundTransition transition = RunFlow::ApplyPlay(ctx, summary);
     if (transition == RoundTransition::ToShop) {
         game.changeState(std::make_unique<ShopState>());
     } else if (transition == RoundTransition::GameOver) {
-        // TODO: 实现 GameOverState
+        // TODO: 补充独立 GameOverState，并迁移当前日志提示。
         std::cout << ">>> GAME OVER <<<" << std::endl;
     }
 }

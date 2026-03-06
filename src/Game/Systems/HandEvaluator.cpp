@@ -1,8 +1,7 @@
 #include "HandEvaluator.hpp"
 #include <iostream>
 
-// Balatro 基础数值表 (Level 1)
-// 实际项目中应从 planets.json 加载
+// 该表提供默认平衡值，确保在外部数据缺失时玩法仍可运行。
 static const std::map<PokerHandType, std::pair<int, int>> BASE_STATS = {
     {PokerHandType::HighCard,      {5, 1}},
     {PokerHandType::Pair,          {10, 2}},
@@ -28,13 +27,13 @@ HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
         return result;
     }
 
-    // 1. 排序 (按 Rank 从小到大)
+    // 先排序是为了把顺子判定和高牌选择简化为线性扫描。
     std::vector<CardSnapshot> sorted = hand;
     std::sort(sorted.begin(), sorted.end(), [](const CardSnapshot& a, const CardSnapshot& b) {
         return a.rank < b.rank;
     });
 
-    // 2. 统计点数频率 (用于判断对子、三条等)
+    // 频次统计是为了让对子/三条/四条判定保持 O(n)。
     std::map<Rank, int> rank_counts;
     std::map<Suit, int> suit_counts;
     for (const auto& c : sorted) {
@@ -42,11 +41,11 @@ HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
         suit_counts[c.suit]++;
     }
 
-    // 3. 核心判断逻辑
+    // 先算组合特征再走判定树，能避免重复遍历。
     bool flush = isFlush(sorted);
     bool straight = isStraight(sorted);
     
-    // 统计最大重复数
+    // 记录重复分布用于牌型分类。
     int max_count = 0;
     int pair_count = 0;
     int three_count = 0;
@@ -59,9 +58,9 @@ HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
         if (count == 4) four_count++;
     }
 
-    // --- 判定树 ---
+    // 判定顺序按牌型强度从高到低，防止弱牌型提前命中。
     if (straight && flush) {
-        // 判断是否是皇家同花顺 (最大牌是 Ace 且是顺子)
+        // 皇家同花顺需要 10 起始且 A 结尾。
         if (sorted.back().rank == Rank::Ace && sorted.front().rank == Rank::Ten) {
              result.type = PokerHandType::RoyalFlush;
              result.name = "Royal Flush";
@@ -73,7 +72,7 @@ HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
     else if (four_count > 0) {
         result.type = PokerHandType::FourOfAKind;
         result.name = "4 of a Kind";
-        // 修正计分牌：只保留那4张一样的
+        // 仅保留参与得分的四张同点牌。
         result.scoring_snapshots.clear();
         for (const auto& c : hand) {
             if (rank_counts[c.rank] == 4) {
@@ -126,14 +125,14 @@ HandResult HandEvaluator::Evaluate(const std::vector<CardSnapshot>& hand) {
     else {
         result.type = PokerHandType::HighCard;
         result.name = "High Card";
-        // High Card 只计最大的那一张
+        // 高牌仅保留最大点数作为计分牌。
         result.scoring_snapshots.clear();
         if (!sorted.empty()) {
             result.scoring_snapshots.push_back(sorted.back());
         }
     }
 
-    // 4. 填充基础数值
+    // 基础值在统一出口填充，避免分支重复写入。
     if (BASE_STATS.count(result.type)) {
         result.base_chips = BASE_STATS.at(result.type).first;
         result.base_mult = BASE_STATS.at(result.type).second;
@@ -153,10 +152,7 @@ bool HandEvaluator::isFlush(const std::vector<CardSnapshot>& hand) {
 
 bool HandEvaluator::isStraight(const std::vector<CardSnapshot>& hand) {
     if (hand.size() < 5) return false;
-    // 假设已排序
-    
-    // 特殊情况：A, 2, 3, 4, 5 (Ace is low)
-    // hand[0]=2, ..., hand[3]=5, hand[4]=Ace
+    // 处理 A-2-3-4-5 的低 A 顺子，保证规则与扑克牌习惯一致。
     bool lowAceStraight = (hand.back().rank == Rank::Ace &&
                            hand[0].rank == Rank::Two &&
                            hand[1].rank == Rank::Three &&
@@ -164,7 +160,7 @@ bool HandEvaluator::isStraight(const std::vector<CardSnapshot>& hand) {
                            hand[3].rank == Rank::Five);
     if (lowAceStraight) return true;
 
-    // 普通情况
+    // 常规顺子要求相邻点数差为 1。
     for (size_t i = 0; i < hand.size() - 1; ++i) {
         int diff = static_cast<int>(hand[i + 1].rank) - static_cast<int>(hand[i].rank);
         if (diff != 1) return false;

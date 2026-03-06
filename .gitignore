@@ -18,6 +18,7 @@ build/
 *.vcxproj.user
 
 docs/
+.codex/
 
 .DS_Store
 Thumbs.db

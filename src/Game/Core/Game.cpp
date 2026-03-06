@@ -19,7 +19,6 @@ Game::Game() {
     }
 }
 
-// [New] 状态切换核心函数
 void Game::changeState(std::unique_ptr<IGameState> newState) {
     m_stateMachine.changeState(*this, std::move(newState));
 }
@@ -40,10 +39,10 @@ bool Game::initResources() {
     m_ctx.database = &db;
     db.setResourceManager(&res);
 
-    // Shader 加载
+    // 将 shader 视为可降级能力，保证缺失时仍可进入游戏。
     const bool shaderLoaded = m_renderPipeline.loadShader("assets/shaders/CRT.fs");
     
-    // 资源加载
+    // 在进入任何状态前加载关键资源，避免运行期才出现致命缺失。
     const bool deckLoaded = res.loadTexture("deck", "assets/textures/1x/8BitDeck.png");
     const bool jokersLoaded = res.loadTexture("jokers", "assets/textures/1x/Jokers.png");
 
@@ -93,7 +92,7 @@ bool Game::initResources() {
         }
     }
 
-    // UI 初始化
+    // 仅在字体有效时初始化 UI，避免文本对象持有非法字体引用。
     if (res.hasFont("main")) {
         m_ui.init(res.getFont("main"));
         m_tooltip.init(res.getFont("main"));
@@ -104,7 +103,7 @@ bool Game::initResources() {
 void Game::initScene() {
     m_scene.initDefaultLayout(m_ctx, 1280.0f, 720.0f);
 
-    // 启动初始状态：进入 RunState
+    // 场景区域回写到上下文后再切状态，防止状态初始化读取空区域。
     changeState(std::make_unique<RunState>());
 }
 
@@ -133,21 +132,20 @@ void Game::processEvents() {
 void Game::update(float dt) {
     m_renderPipeline.update(dt);
 
-    // 物理/动画更新
+    // 先更新被动动画，再执行状态逻辑以保持画面与输入响应一致。
     if (auto* jokerArea = m_scene.jokerArea()) jokerArea->update(dt);
 
     if (auto* state = m_stateMachine.currentState()) {
         state->update(*this, dt);
     }
 
-    // UI 更新
+    // 每帧同步 HUD，确保显示总是反映本帧最新状态。
     m_ui.update(m_ctx);
 
-    // 特效更新与清理
+    // 每帧回收短生命周期特效，避免容器无限增长。
     for (auto& effect : m_effects) {
         effect.update(dt);
     }
-    // C++20/Standard remove_if idioms
     m_effects.erase(
         std::remove_if(m_effects.begin(), m_effects.end(), 
             [](const FloatingText& ft){ return ft.isDead(); }),

@@ -5,6 +5,13 @@
 
 class CardView {
 public:
+    /**
+     * 初始化卡牌视图。
+     *
+     * @param texture 纹理图集
+     * @param w 逻辑宽度
+     * @param h 逻辑高度
+     */
     void init(const sf::Texture& texture, int w, int h) {
         m_base.setSize(sf::Vector2f(static_cast<float>(w), static_cast<float>(h)));
         m_base.setFillColor(sf::Color::White);
@@ -22,8 +29,20 @@ public:
         applyTransform();
     }
 
+    /**
+     * 设置纹理裁剪区域。
+     *
+     * @param rect 裁剪矩形
+     */
     void setTextureRect(const sf::IntRect& rect) { m_sprite.setTextureRect(rect); }
 
+    /**
+     * 更新视图动画。
+     *
+     * @param isSelected 是否选中
+     * @param isHovered 是否悬停
+     * @param dt 帧间隔秒数
+     */
     void update(bool isSelected, bool isHovered, float dt) {
         float visualOffsetY = 0.0f;
         float visualScale = m_targetScale;
@@ -51,15 +70,38 @@ public:
         m_shadow.setPosition(newPos.x + shadowOffset, newPos.y + shadowOffset);
     }
 
+    /**
+     * 绘制卡牌视图。
+     *
+     * @param target 绘制目标
+     */
     void draw(sf::RenderTarget& target) const {
         target.draw(m_shadow);
         target.draw(m_base);
         target.draw(m_sprite);
     }
 
+    /**
+     * 设置目标位置。
+     *
+     * @param x X 坐标
+     * @param y Y 坐标
+     */
     void setTargetPosition(float x, float y) { m_targetPos = sf::Vector2f(x, y); }
+
+    /**
+     * 设置目标缩放。
+     *
+     * @param scale 缩放值
+     */
     void setBaseScale(float scale) { m_targetScale = scale; }
 
+    /**
+     * 立即设置位置（无插值）。
+     *
+     * @param x X 坐标
+     * @param y Y 坐标
+     */
     void setInstantPosition(float x, float y) {
         m_targetPos = sf::Vector2f(x, y);
         m_base.setPosition(x, y);
@@ -67,8 +109,25 @@ public:
         m_shadow.setPosition(x + 5.0f, y + 5.0f);
     }
 
+    /**
+     * 设置精灵颜色。
+     *
+     * @param color 颜色
+     */
     void setColor(const sf::Color& color) { m_sprite.setColor(color); }
+
+    /**
+     * 获取全局边界。
+     *
+     * @return 包围盒
+     */
     sf::FloatRect getGlobalBounds() const { return m_base.getGlobalBounds(); }
+
+    /**
+     * 获取当前位置。
+     *
+     * @return 世界坐标
+     */
     sf::Vector2f getPosition() const { return m_base.getPosition(); }
 
 private:

@@ -1,16 +1,22 @@
 #pragma once
 #include <string>
-#include <nlohmann/json.hpp> // 确保你的外部库里有这个
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
+/**
+ * Joker 静态配置。
+ *
+ * 数据库加载后保留原始参数，目的是让效果工厂拥有足够上下文，
+ * 避免把玩法配置硬编码到 C++ 逻辑里。
+ */
 struct JokerData {
-    std::string id;          // json key, e.g., "j_greedy_joker"
-    std::string name;        // Display name
-    std::string text;        // Description
+    std::string id;
+    std::string name;
+    std::string text;
     int cost = 0;
-    int atlasIndex = 0;      // Index in the texture atlas
+    int atlasIndex = 0;
     
-    std::string effectId;    // C++ class identifier (e.g., "SuitMult")
-    json params;             // Raw params to pass to the effect constructor
+    std::string effectId;
+    json params;
 };

@@ -1,21 +1,24 @@
 #pragma once
-#include <vector>
+
 #include <algorithm>
 #include <cstddef>
-#include <random>
-#include <optional>
 #include <functional>
-#include "../Objects/Card.hpp" // 为了使用 Suit 和 Rank 枚举
+#include <optional>
+#include <random>
+#include <vector>
 
-// 轻量级结构，仅存储数据，不涉及渲染
+#include "../Objects/Card.hpp"
+
+/**
+ * 牌堆内部使用的轻量牌数据。
+ *
+ * 与渲染对象解耦后，洗牌与抽牌规则可以独立测试，
+ * 从而降低玩法层受图形资源生命周期影响的概率。
+ */
 struct CardData {
     Suit suit;
     Rank rank;
     int baseChips;
-    // 未来可以在这里扩展：
-    // bool isGold = false;
-    // bool isSteel = false;
-    // string enhancementId; 
 };
 
 class Deck {
@@ -24,11 +27,22 @@ public:
 
     Deck() = default;
 
+    /**
+     * 注入点数到筹码值的映射函数。
+     *
+     * 通过外部提供器驱动基础值，便于后续调整平衡而不改牌堆实现。
+     *
+     * @param provider 点数筹码查询函数
+     */
     void setRankChipProvider(RankChipProvider provider) {
         m_rankChipProvider = std::move(provider);
     }
 
-    // 初始化标准 52 张牌
+    /**
+     * 初始化标准 52 张牌。
+     *
+     * 每次都会清空旧数据，避免上一轮残留牌进入新局。
+     */
     void initStandardDeck() {
         m_cards.clear();
         for (int s = 0; s < 4; ++s) {
@@ -42,7 +56,14 @@ public:
         }
     }
 
-    // 洗牌
+    /**
+     * 原地洗牌。
+     *
+     * 提供 `pickIndex` 时走可控 Fisher-Yates，用于稳定回放或测试。
+     * 不提供时走随机设备驱动的常规洗牌。
+     *
+     * @param pickIndex 可选索引生成函数
+     */
     void shuffle(const std::function<std::size_t(std::size_t)>& pickIndex = {}) {
         if (m_cards.size() < 2) return;
 
@@ -59,22 +80,39 @@ public:
         std::shuffle(m_cards.begin(), m_cards.end(), g);
     }
 
-    // 抽牌 (从末尾移除)
+    /**
+     * 抽取一张牌。
+     *
+     * 使用尾部弹出可避免头部删除产生的线性移动开销。
+     *
+     * @return 抽到的牌；为空表示牌堆耗尽
+     */
     std::optional<CardData> draw() {
         if (m_cards.empty()) {
-            return std::nullopt; // 没牌了
+            return std::nullopt;
         }
         CardData top = m_cards.back();
         m_cards.pop_back();
         return top;
     }
 
-    // 获取剩余数量
+    /**
+     * 获取剩余牌数。
+     *
+     * @return 当前牌堆剩余张数
+     */
     int getRemainingCount() const {
-        return (int)m_cards.size();
+        return static_cast<int>(m_cards.size());
     }
 
-    // [拓展接口] 往牌堆里加牌 (比如使用了“幻灵牌”生成了一张新牌)
+    /**
+     * 追加一张牌到牌堆。
+     *
+     * 该入口保留给未来“效果生成新牌”等玩法扩展。
+     *
+     * @param s 花色
+     * @param r 点数
+     */
     void addCard(Suit s, Rank r) {
         CardData data;
         data.suit = s;

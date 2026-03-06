@@ -16,6 +16,16 @@ struct ScoreSummary {
 
 class ScoringManager {
 public:
+    /**
+     * 计算出牌最终得分。
+     *
+     * @param baseChips 基础筹码
+     * @param baseMult 基础倍率
+     * @param scoringCards 计分牌快照
+     * @param handArea 手牌区
+     * @param jokerArea Joker 区
+     * @return 结算结果
+     */
     static ScoreSummary CalculateFinalScore(
         int baseChips,
         int baseMult,
@@ -24,6 +34,13 @@ public:
         CardArea* jokerArea
     );
 
+    /**
+     * 计算弃牌阶段效果。
+     *
+     * @param discardedCards 弃牌快照
+     * @param jokerArea Joker 区
+     * @return 结算结果
+     */
     static ScoreSummary CalculateDiscardEffect(
         const std::vector<CardSnapshot>& discardedCards,
         CardArea* jokerArea
