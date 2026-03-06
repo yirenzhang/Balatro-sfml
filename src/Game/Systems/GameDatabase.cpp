@@ -11,23 +11,33 @@ using json = nlohmann::json;
 
 GameDatabase::GameDatabase() = default;
 
+void GameDatabase::recordError(const std::string& msg) {
+    m_errors.push_back(msg);
+    std::cerr << msg << std::endl;
+}
+
 void GameDatabase::setResourceManager(ResourceManager* resourceManager) {
     m_resourceManager = resourceManager;
 }
 
-void GameDatabase::loadJokers(const std::string& filepath) {
+bool GameDatabase::loadJokers(const std::string& filepath) {
+    m_jokerDb.clear();
+
     std::ifstream f(filepath);
     if (!f.is_open()) {
-        std::cerr << "Failed to open joker database: " << filepath << std::endl;
-        return;
+        recordError("[Error] Failed to open joker database: " + filepath);
+        return false;
     }
 
     json j;
     try {
         f >> j;
     } catch (const json::parse_error& e) {
-        std::cerr << "JSON Parse Error (Jokers): " << e.what() << std::endl;
-        return;
+        recordError(std::string("[Error] JSON parse error (Jokers): ") + e.what());
+        return false;
+    } catch (const std::exception& e) {
+        recordError(std::string("[Error] Failed to read jokers json: ") + e.what());
+        return false;
     }
 
     for (auto& [key, value] : j.items()) {
@@ -43,16 +53,17 @@ void GameDatabase::loadJokers(const std::string& filepath) {
         m_jokerDb[key] = data;
     }
     std::cout << "Loaded " << m_jokerDb.size() << " jokers." << std::endl;
+    return true;
 }
 
 std::shared_ptr<Card> GameDatabase::createJoker(const std::string& jokerId) {
     if (m_jokerDb.find(jokerId) == m_jokerDb.end()) {
-        std::cerr << "Error: Joker ID not found: " << jokerId << std::endl;
+        recordError("[Error] Joker ID not found: " + jokerId);
         return nullptr;
     }
 
     if (!m_resourceManager) {
-        std::cerr << "Error: ResourceManager is not set for GameDatabase." << std::endl;
+        recordError("[Error] ResourceManager is not set for GameDatabase.");
         return nullptr;
     }
 
@@ -69,19 +80,24 @@ std::shared_ptr<Card> GameDatabase::createJoker(const std::string& jokerId) {
     return card;
 }
 
-void GameDatabase::loadRanks(const std::string& filepath) {
+bool GameDatabase::loadRanks(const std::string& filepath) {
+    m_rankChips.clear();
+
     std::ifstream f(filepath);
     if (!f.is_open()) {
-        std::cerr << "Failed to open ranks database: " << filepath << std::endl;
-        return;
+        recordError("[Error] Failed to open ranks database: " + filepath);
+        return false;
     }
 
     json j;
     try {
         f >> j;
     } catch (const json::parse_error& e) {
-        std::cerr << "JSON Parse Error (Ranks): " << e.what() << std::endl;
-        return;
+        recordError(std::string("[Error] JSON parse error (Ranks): ") + e.what());
+        return false;
+    } catch (const std::exception& e) {
+        recordError(std::string("[Error] Failed to read ranks json: ") + e.what());
+        return false;
     }
 
     std::unordered_map<std::string, Rank> strToRank = {
@@ -102,9 +118,10 @@ void GameDatabase::loadRanks(const std::string& filepath) {
         }
     }
     std::cout << "Loaded chip values for " << loadedCount << " ranks from JSON." << std::endl;
+    return loadedCount > 0;
 }
 
-int GameDatabase::getRankChips(Rank rank) {
+int GameDatabase::getRankChips(Rank rank) const {
     int r = static_cast<int>(rank);
     auto it = m_rankChips.find(r);
     if (it != m_rankChips.end()) {

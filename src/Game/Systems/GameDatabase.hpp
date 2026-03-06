@@ -19,20 +19,25 @@ class GameDatabase {
 public:
     GameDatabase();
 
-    void loadJokers(const std::string& filepath);
+    bool loadJokers(const std::string& filepath);
     void setResourceManager(ResourceManager* resourceManager);
 
     std::shared_ptr<Card> createJoker(const std::string& jokerId);
 
-    void loadRanks(const std::string& filepath);
+    bool loadRanks(const std::string& filepath);
 
-    int getRankChips(Rank rank);
+    int getRankChips(Rank rank) const;
 
     std::vector<std::string> getAllJokerIds() const;
+    const std::vector<std::string>& errors() const { return m_errors; }
+    void clearErrors() { m_errors.clear(); }
 
 
 private:
+    void recordError(const std::string& msg);
+
     std::unordered_map<std::string, JokerData> m_jokerDb;
     std::map<int, int> m_rankChips; 
     ResourceManager* m_resourceManager = nullptr;
+    std::vector<std::string> m_errors;
 };

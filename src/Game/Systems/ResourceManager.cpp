@@ -2,10 +2,15 @@
 
 #include <iostream>
 
+void ResourceManager::recordError(const std::string& msg) {
+    m_errors.push_back(msg);
+    std::cerr << msg << std::endl;
+}
+
 bool ResourceManager::loadTexture(const std::string& id, const std::string& filename) {
     sf::Texture tex;
     if (!tex.loadFromFile(filename)) {
-        std::cerr << "[Error] Failed to load texture: " << filename << std::endl;
+        recordError("[Error] Failed to load texture: " + filename + " (id=" + id + ")");
         return false;
     }
 
@@ -16,7 +21,7 @@ bool ResourceManager::loadTexture(const std::string& id, const std::string& file
 
 sf::Texture& ResourceManager::getTexture(const std::string& id) {
     if (m_textures.find(id) == m_textures.end()) {
-        std::cerr << "[Warning] Texture not found: " << id << ". Returning empty texture." << std::endl;
+        recordError("[Error] Texture not found: " + id + ". Returning empty texture.");
         static sf::Texture empty;
         return empty;
     }
@@ -26,7 +31,7 @@ sf::Texture& ResourceManager::getTexture(const std::string& id) {
 bool ResourceManager::loadFont(const std::string& id, const std::string& filename) {
     sf::Font font;
     if (!font.loadFromFile(filename)) {
-        std::cerr << "[Error] Failed to load font: " << filename << std::endl;
+        recordError("[Error] Failed to load font: " + filename + " (id=" + id + ")");
         return false;
     }
 
@@ -36,7 +41,7 @@ bool ResourceManager::loadFont(const std::string& id, const std::string& filenam
 
 sf::Font& ResourceManager::getFont(const std::string& id) {
     if (m_fonts.find(id) == m_fonts.end()) {
-        std::cerr << "[Warning] Font not found: " << id << ". Returning empty font." << std::endl;
+        recordError("[Error] Font not found: " + id + ". Returning empty font.");
         static sf::Font empty;
         return empty;
     }
@@ -46,7 +51,7 @@ sf::Font& ResourceManager::getFont(const std::string& id) {
 bool ResourceManager::loadShader(const std::string& id, const std::string& fragPath) {
     auto shader = std::make_shared<sf::Shader>();
     if (!shader->loadFromFile(fragPath, sf::Shader::Fragment)) {
-        std::cerr << "[Error] Failed to load shader: " << fragPath << std::endl;
+        recordError("[Error] Failed to load shader: " + fragPath + " (id=" + id + ")");
         return false;
     }
 
@@ -59,4 +64,16 @@ std::shared_ptr<sf::Shader> ResourceManager::getShader(const std::string& id) {
         return nullptr;
     }
     return m_shaders[id];
+}
+
+bool ResourceManager::hasTexture(const std::string& id) const {
+    return m_textures.find(id) != m_textures.end();
+}
+
+bool ResourceManager::hasFont(const std::string& id) const {
+    return m_fonts.find(id) != m_fonts.end();
+}
+
+bool ResourceManager::hasShader(const std::string& id) const {
+    return m_shaders.find(id) != m_shaders.end();
 }

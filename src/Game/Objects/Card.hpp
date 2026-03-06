@@ -17,10 +17,13 @@ public:
     static constexpr int JOKER_MARGIN = 1;
     static constexpr int JOKER_COLS = 10;
 
-    Card(Suit suit, Rank rank, const sf::Texture& texture) {
+    Card(Suit suit, Rank rank) {
         m_model.type = CardType::PlayingCard;
         m_model.suit = suit;
         m_model.rank = rank;
+    }
+
+    Card(Suit suit, Rank rank, const sf::Texture& texture) : Card(suit, rank) {
 
         m_view.init(texture, DECK_WIDTH, DECK_HEIGHT);
 
@@ -36,10 +39,13 @@ public:
         m_view.setTextureRect(sf::IntRect(gridX * DECK_WIDTH, gridY * DECK_HEIGHT, DECK_WIDTH, DECK_HEIGHT));
     }
 
-    Card(int jokerId, const sf::Texture& texture) {
+    Card([[maybe_unused]] int jokerId) {
         m_model.type = CardType::Joker;
         m_model.suit = Suit::None;
         m_model.rank = Rank::Two;
+    }
+
+    Card(int jokerId, const sf::Texture& texture) : Card(jokerId) {
 
         m_view.init(texture, JOKER_WIDTH, JOKER_HEIGHT);
 
